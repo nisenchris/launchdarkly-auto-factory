@@ -112,12 +112,14 @@ on earlier ones. Spikes (§S) should be resolved before the milestone that depen
 
 ## M5 — Demo app (`examples/demo-app/`)
 
-- [ ] `frontend/` — minimal JS/TS app with at least one flag-guardable feature
-- [ ] `backend/` — minimal Python service with at least one flag-guardable endpoint
-- [ ] Both deploy as **independent Railway services**, each emitting a post-deploy notification
-- [ ] Each service exposes a status endpoint reporting its deployed SHA (for fullstack coordination)
-- [ ] A `.release-flags/` directory convention demonstrated in the demo repo
-- [ ] Seed the demo flags/metrics in the target LD project (via bridge or scripted)
+- [x] `frontend/` — Node/Express app, page + `/api/status`, fetches the backend greeting (syntax-checked)
+- [x] `backend/` — Python/Flask, `/api/status` + `/api/greeting` gated by the `new-greeting` flag
+      (graceful without LD SDK key); `requirements.txt` + `Procfile` (syntax-checked)
+- [x] Each service exposes `/api/status` → `{service, version=deployed SHA}` (fullstack contract)
+- [x] `.release-flags/pr-1.json` demonstrates the convention (backend scope, guarded rollout overrides)
+- [~] Both deploy as independent Railway services + Notifier post-deploy — code/config ready; actual
+      deploy is environment-specific → **ISSUES I7**
+- [ ] Seed the demo flags/metrics (`new-greeting`, `api-errors`) in the target project — not yet
 
 ---
 

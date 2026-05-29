@@ -1,0 +1,13 @@
+{
+  "flagKey": "new-greeting",
+  "scope": "backend",
+  "releaseOverrides": {
+    "releaseMethod": "guarded",
+    "randomizationUnit": "user",
+    "stages": [
+      { "allocation": 20000, "durationMillis": 300000 },
+      { "allocation": 100000, "durationMillis": 300000 }
+    ],
+    "metricKeys": ["api-errors"]
+  }
+}
