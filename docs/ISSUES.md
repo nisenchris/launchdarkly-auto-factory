@@ -62,6 +62,16 @@ work lives in the milestones in `docs/build-checklist.md`; this file is the "don
 - **Status:** the approval *logic* (apply on approve / gate on risk / require human) is buildable; the
   flag's evaluation context is the open piece. A hardcoded-config fallback covers the gap.
 
+### I8. `previousSha` sourcing on Railway
+- **What:** The Notifier needs the previously-deployed SHA so Beacon can diff
+  `.release-flags/` (new = present at current SHA, absent at previous). Spinnaker provided this; Railway
+  does not expose "previous deploy SHA" natively.
+- **Status:** the Notifier accepts `--previous-sha` / `PREVIOUS_SHA` as an explicit input and posts it.
+  How that value is produced on Railway is unresolved. Options to evaluate: (a) Beacon tracks last-seen
+  SHA per service (adds state — diverges from the stateless design), (b) a Railway deploy hook that
+  captures the prior active deployment, (c) compare against `main~1`.
+- **Kept out of scope:** inventing a `previousSha` mechanism — flagged rather than guessed.
+
 ### I7. Demo app Railway deployment
 - **What:** Validated Railway service config + deploy for the two demo services.
 - **Status:** the app code + status endpoints + a Railway config can be scaffolded, but the account,

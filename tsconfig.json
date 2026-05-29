@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "packages/shared" },
-    { "path": "packages/config-bridge" }
+    { "path": "packages/config-bridge" },
+    { "path": "packages/beacon" }
   ]
 }

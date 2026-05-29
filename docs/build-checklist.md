@@ -77,7 +77,8 @@ on earlier ones. Spikes (§S) should be resolved before the milestone that depen
       `ReleaseFlagFile`/`DiscoveredFlag`, `ApprovalMode`, `RiskLevel`, `DeployNotification`
 - [x] **Vega client interface** (`vegaClient.ts`): stable `VegaTransport` seam + `VegaClient` poll loop;
       `StubVegaTransport` throws until real API docs land (PLACEHOLDER, isolated)
-- [ ] Unit tests for the client (mocked HTTP), the release-instruction builder, and config loaders
+- [~] Unit tests: release-instruction builder + scope matrix done (`tests/logic.test.ts`). Mocked-HTTP
+      client tests + config-loader tests still pending.
 
 ---
 
@@ -158,32 +159,28 @@ Concept-map of the reference: **Beacon calls the LD release API directly** inste
 pipeline system.
 
 ### Notifier (post-deploy)
-- [ ] Railway post-deploy hook that POSTs `{sha, previous_sha, service, environment}` to Beacon
-- [ ] Authenticated with a shared secret header; **non-blocking** (never delays deploys)
+- [x] `auto-factory-notify` — POSTs `{sha, previousSha, service, environment}` to Beacon; **non-blocking**
+      (logs + exits 0 on error so it never delays deploys); shared-secret header
+- [~] `previousSha` sourcing on Railway is an explicit input — how it's produced is open → **ISSUES I8**
 
 ### Beacon (`packages/beacon/`)
-- [ ] HTTP endpoint (e.g. `POST /flag-releases`) with shared-secret auth
-- [ ] **Discovery**: diff `.release-flags/` at `previous_sha` vs `sha` via GitHub Contents API → new files
-- [ ] Parse `.release-flags/pr-N.json` → `{flagKey, scope, releaseOverrides}`
-- [ ] **Scope routing** (`config/scopes.yaml`, generalized — not hardcoded service names):
-  - [ ] single-service scope → trigger
-  - [ ] other-service scope → skip
-  - [ ] fullstack → cross-service check
-- [ ] **Fullstack coordination** (stateless): read the other service's deployed SHA from its status
-      endpoint, verify the same `.release-flags/` file is present there; trigger if yes, skip if no
-- [ ] **Release trigger** → call the M2 release adapter (`startAutomatedRelease` semantic patch):
-  - [ ] map release method: immediate (plain targeting flip) vs. `releaseKind` progressive / guarded
-  - [ ] apply release policy (read from flag) with `.release-flags` overrides taking precedence
-  - [ ] build the instruction: `originalVariationId`/`targetVariationId`, placement (fallthrough vs.
-        `ruleId`/`ref`/new-rule `clauses`), `randomizationUnit`, `stages` `{allocation, durationMillis}`,
-        optional `extensionDurationMillis` (guarded), `metrics` `{key, isGroup}` +
-        `metricMonitoringPreferences` `{metricKey: {autoRollback}}`
-- [ ] **Monitor** the automated release to completion via the adapter (poll status until terminal —
-      `completed` / `reverted` / stopped; surface stage progress and regressions)
-- [ ] **Backstop** for the fullstack "wait" path: retry/timeout so a lost notification can't strand a
-      release (see `plan.html` §8)
-- [ ] `release-source` adapter so `.release-flags`-in-repo can later be swapped for an LD-native source
-- [ ] Tests: discovery diff, scope routing matrix, fullstack present/absent, trigger payload, monitor
+- [x] HTTP endpoint `POST /flag-releases` with shared-secret auth (`x-beacon-secret`); `GET /health`
+- [x] **Discovery**: diff `.release-flags/` at `previousSha` vs `sha` via GitHub Contents API → new files
+- [x] Parse `.release-flags/*.json` → `{flagKey, scope, releaseOverrides}`
+- [x] **Scope routing** (generalized via `config/services.yaml` side mapping — not hardcoded service names):
+      single-side → trigger, other-side → skip, fullstack → cross-service check
+- [x] **Fullstack coordination** (stateless): reads the other side's deployed SHA from its status
+      endpoint, verifies the `.release-flags/` file is present there; trigger if yes, wait if no
+- [x] **Release trigger** → shared release adapter: immediate (targeting flip) vs. guarded/progressive
+      `startAutomatedRelease`; resolves boolean flag variation IDs; metrics + monitoring prefs;
+      `.release-flags` overrides applied
+- [~] **Monitor**: `monitorRelease` exists in the adapter; Beacon currently fires-and-returns (doesn't
+      block on monitoring). Wire-in deferred.
+- [ ] **Backstop** for the fullstack "wait" path (retry/timeout) — not yet (relies on re-notification)
+- [~] `release-source` is config-driven (`release-flags-dir` active); LD-native source is future
+- [x] Tests: scope routing matrix + release-instruction builder (`tests/logic.test.ts`, 6 passing).
+      Discovery/fullstack tests (need GitHub mock) — not yet.
+- [~] **Multivariate flags**: trigger handles boolean only; non-boolean errors clearly → revisit later
 
 ---
 
