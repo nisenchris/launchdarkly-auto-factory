@@ -6,20 +6,20 @@ work lives in the milestones in `docs/build-checklist.md`; this file is the "don
 
 ---
 
-## BLOCKED — need real API docs
+## RESOLVED (built; needs live verification)
 
-### I1. Real Vega dispatch transport
-- **What:** The concrete `VegaTransport` implementation (endpoint, auth, request/response).
-- **Why blocked:** The public/partner-facing Vega API is not yet documented; the reference uses
-  internal-only infrastructure.
-- **Built around it:** `packages/shared/src/vegaClient.ts` defines the stable interface + a
-  `StubVegaTransport` that throws. The Phase 1 graph walker codes against the interface, so wiring the
-  real transport is a localized change.
-- **Unblock:** real Vega API docs from the team.
+### I1. Real Vega dispatch transport — RESOLVED
+- **Built:** `GraphQLVegaTransport` (`packages/shared/src/vegaTransport.ts`) against the agent-dispatch
+  GraphQL schema (`reference-private/internal-apis/schema.graphqls`): `agentDispatch` mutation +
+  `agentDispatchStatus` query, mapping messages/tags. Unit-tested with a fake fetch. The action uses it
+  when `VEGA_ENDPOINT` is set, else the stub.
+- **Residual:** the dispatch host is a private/internal endpoint (operator supplies `VEGA_ENDPOINT`);
+  not yet exercised against the live endpoint. Confirm once reachable.
 
-### I2. GitHub Action → Vega auth & secrets
-- **What:** Which secrets the Phase 1 action needs and how it authenticates to Vega.
-- **Why blocked:** depends on I1.
+### I2. GitHub Action → Vega auth — RESOLVED
+- **Resolved:** auth is a **regular LaunchDarkly API key**, sent raw in the `Authorization` header
+  (matches the `LdClient` convention). `VEGA_TOKEN` defaults to `LD_API_KEY`. `VEGA_AUTH_HEADER` can
+  override the header name if a given endpoint expects a non-standard one.
 
 ---
 

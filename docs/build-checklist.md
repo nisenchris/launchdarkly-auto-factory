@@ -10,9 +10,9 @@ on earlier ones. Spikes (§S) should be resolved before the milestone that depen
 
 > **Build status (committed to `main`):** M1 (guardrails+CI), M2 (shared), M3 (bridge), M4 (bootstrap),
 > M5 (demo app), M6 (Phase 1 walker/action — Vega stubbed), M7 (Beacon+Notifier) are built; 17 tests
-> passing; typecheck + public-leak guard green. Remaining work is **blocked or verification-only**:
-> the real Vega transport (I1), config sanitization (I3), and the M8 end-to-end (needs live deploys +
-> Vega). See `docs/ISSUES.md`.
+> passing; typecheck + public-leak guard green. The **real Vega transport is built** (GraphQL, LD-API-key
+> auth — I1 resolved). Remaining work is **verification or human-review**: reaching the live Vega
+> endpoint, config sanitization (I3), and the M8 end-to-end (needs live deploys + Vega). See `docs/ISSUES.md`.
 
 ---
 
@@ -37,11 +37,10 @@ on earlier ones. Spikes (§S) should be resolved before the milestone that depen
 
 ## §S — Spikes to resolve first (gate the milestones noted)
 
-- [ ] 🔬 **Public Vega dispatch API + auth** *(gates M6 / Phase 1)*
-  - [ ] Confirm the public/partner-facing endpoint to dispatch an agent graph against an LD project
-  - [ ] Confirm auth model for that endpoint (token type, headers) for an external partner
-  - [ ] Confirm dispatch is async (dispatch → poll status) and capture request/response shapes
-  - [ ] Confirm how PR context is passed and how the agent graph is referenced
+- [x] 🔬 **Vega dispatch API + auth** *(RESOLVED — schema in `reference-private/internal-apis/`)*
+  - Real `GraphQLVegaTransport` built: `agentDispatch` mutation + `agentDispatchStatus` poll
+  - Auth = **regular LD API key** (raw `Authorization` header); `VEGA_TOKEN` defaults to `LD_API_KEY`
+  - Residual: exercise against the live (private) endpoint once `VEGA_ENDPOINT` is reachable
 - [x] 🔬 **LD release API** *(RESOLVED — spec in `reference-private/internal-apis/`)*
   - Trigger = a **semantic-patch** instruction (`startAutomatedRelease`, kind `guarded`/`progressive`)
     on the standard flag PATCH endpoint; stop via `stopAutomatedRelease`.
@@ -138,7 +137,8 @@ research → flagging → **metrics** → testing → review. The reference buil
 not an optional enhancement.
 
 - [x] Assemble PR context (`prContext.ts`) from the GitHub event payload + env
-- [x] Dispatch to Vega via `VegaClient` (async dispatch + poll); transport is the stub until I1
+- [x] Dispatch to Vega via `VegaClient` (async dispatch + poll); **real `GraphQLVegaTransport` wired**
+      (LD-API-key auth), stub fallback when `VEGA_ENDPOINT` unset
 - [x] **Trigger on PR opened/synchronized/reopened** — no label gate (workflow template in
       `bootstrap/github-action-template/auto-factory.yml`)
 - [x] Walk the agent graph (`graphWalker.ts`): follows edges, honors handoff `skip_if_tags` /
@@ -154,7 +154,8 @@ not an optional enhancement.
       (ISSUES I3); not built blind
 - [ ] Code-delivery mechanism + CI-loop guard — **open** (depends on the source material; ISSUES carries it)
 - [ ] **Package/publish the action** so `uses:` resolves: commit/publish the esbuild bundle → **ISSUES I10**
-- [ ] End-to-end test on a real demo PR — **blocked on the real Vega transport (ISSUES I1)**
+- [ ] End-to-end test on a real demo PR — needs a **reachable live Vega endpoint** + committed agent
+      configs (ISSUES I3); the transport itself is built (I1 resolved)
 
 ---
 

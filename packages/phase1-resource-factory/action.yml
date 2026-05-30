@@ -24,7 +24,13 @@ inputs:
     required: false
     default: "yolo"
   vega_endpoint:
-    description: "Vega dispatch endpoint (placeholder until the public API is documented)."
+    description: "Vega agent-dispatch GraphQL endpoint (deployment-specific)."
+    required: false
+  vega_token:
+    description: "Vega auth credential."
+    required: false
+  vega_auth_header:
+    description: "Auth header name for Vega (default Authorization)."
     required: false
   github_token:
     description: "Token for posting the PR summary comment."

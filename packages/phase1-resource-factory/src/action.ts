@@ -9,16 +9,39 @@
  */
 
 import { readFileSync } from "node:fs";
-import { StubVegaTransport, VegaClient, type VegaTransport } from "@auto-factory/shared";
+import {
+  GraphQLVegaTransport,
+  StubVegaTransport,
+  VegaClient,
+  type VegaTransport,
+} from "@auto-factory/shared";
 import { decideApproval, getApprovalMode, interpretWalk } from "./approval.js";
 import { postPrComment } from "./comment.js";
 import { type AgentGraph, walkGraph } from "./graphWalker.js";
 import { assemblePrContext } from "./prContext.js";
 
-/** Swap this for the real transport when the Vega API is documented (ISSUES I1). */
+/**
+ * Use the real GraphQL transport when VEGA_ENDPOINT + VEGA_TOKEN are set; else
+ * fall back to the stub (no agent execution). Endpoint/auth are env-configured —
+ * the dispatch host and auth header name are deployment-specific.
+ */
 function createVegaClient(): VegaClient {
-  const transport: VegaTransport = new StubVegaTransport();
-  return new VegaClient(transport);
+  const endpoint = process.env.VEGA_ENDPOINT;
+  // Auth is a regular LaunchDarkly API key — reuse LD_API_KEY unless overridden.
+  const token = process.env.VEGA_TOKEN ?? process.env.LD_API_KEY;
+  if (endpoint && token) {
+    const transport: VegaTransport = new GraphQLVegaTransport({
+      endpoint,
+      token,
+      ...(process.env.VEGA_AUTH_HEADER ? { authHeaderName: process.env.VEGA_AUTH_HEADER } : {}),
+      ...(process.env.VEGA_REQUEST_TYPE ? { requestType: process.env.VEGA_REQUEST_TYPE } : {}),
+      ...(process.env.GITHUB_REPOSITORY ? { repositories: [process.env.GITHUB_REPOSITORY] } : {}),
+      ...(process.env.LD_PROJECT_KEY ? { projectSlug: process.env.LD_PROJECT_KEY } : {}),
+    });
+    return new VegaClient(transport);
+  }
+  console.log("VEGA_ENDPOINT/VEGA_TOKEN not set — using stub transport (no agent execution).");
+  return new VegaClient(new StubVegaTransport());
 }
 
 function loadGraph(): AgentGraph {
@@ -41,6 +64,9 @@ function mapActionInputs(): void {
   set("GRAPH_FILE", "graph_file");
   set("APPROVAL_MODE", "approval_mode");
   set("GITHUB_TOKEN", "github_token");
+  set("VEGA_ENDPOINT", "vega_endpoint");
+  set("VEGA_TOKEN", "vega_token");
+  set("VEGA_AUTH_HEADER", "vega_auth_header");
 }
 
 async function main(): Promise<void> {

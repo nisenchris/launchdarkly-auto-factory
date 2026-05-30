@@ -6,3 +6,4 @@ export * from "./config.js";
 export * from "./ldClient.js";
 export * from "./releaseAdapter.js";
 export * from "./vegaClient.js";
+export * from "./vegaTransport.js";
