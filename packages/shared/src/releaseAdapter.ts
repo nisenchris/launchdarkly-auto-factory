@@ -23,6 +23,11 @@ function automatedReleasesPath(projectKey: string, environmentKey: string, id: s
   return `/internal/projects/${projectKey}/environments/${environmentKey}/automated-releases/${id}`;
 }
 
+/** Path for reading a flag's configured release policy (beta/internal). */
+function releaseSettingsPath(projectKey: string, flagKey: string, environmentKey: string): string {
+  return `/internal/projects/${projectKey}/flags/${flagKey}/environments/${environmentKey}/release-settings`;
+}
+
 /** Where to place the release on the flag. Omit for fallthrough. */
 export interface ReleasePlacement {
   ruleId?: string;
@@ -143,6 +148,71 @@ export async function getReleaseStatus(
     headers: BETA_HEADER,
   });
   return res.data;
+}
+
+// ----------------------------------------------------------------------------
+// Release policy (defaults configured on the flag; overrides take precedence)
+// ----------------------------------------------------------------------------
+
+/** Normalized release policy read from a flag's release-settings. */
+export interface ReleasePolicy {
+  releaseMethod?: ReleaseKind;
+  randomizationUnit?: string;
+  stages?: Stage[];
+  metricKeys?: string[];
+  metricGroupKeys?: string[];
+}
+
+interface RawReleaseSettings {
+  releaseMethod?: string;
+  guardedReleaseConfig?: {
+    rolloutContextKindKey?: string;
+    metricKeys?: string[];
+    metricGroupKeys?: string[];
+    stages?: Stage[];
+  };
+  progressiveReleaseConfig?: {
+    rolloutContextKindKey?: string;
+    stages?: Stage[];
+  };
+}
+
+function normalizeMethod(m?: string): ReleaseKind | undefined {
+  if (!m) return undefined;
+  const s = m.toLowerCase();
+  if (s.includes("guarded")) return "guarded";
+  if (s.includes("progressive")) return "progressive";
+  if (s.includes("immediate")) return "immediate";
+  return undefined;
+}
+
+/** Map a raw release-settings response to the normalized policy shape. */
+export function normalizeReleasePolicy(raw: RawReleaseSettings): ReleasePolicy {
+  const cfg = raw.guardedReleaseConfig ?? raw.progressiveReleaseConfig ?? {};
+  const out: ReleasePolicy = {};
+  const method = normalizeMethod(raw.releaseMethod);
+  if (method) out.releaseMethod = method;
+  if (cfg.rolloutContextKindKey) out.randomizationUnit = cfg.rolloutContextKindKey;
+  if (cfg.stages?.length) out.stages = cfg.stages;
+  const g = raw.guardedReleaseConfig;
+  if (g?.metricKeys?.length) out.metricKeys = g.metricKeys;
+  if (g?.metricGroupKeys?.length) out.metricGroupKeys = g.metricGroupKeys;
+  return out;
+}
+
+/** Read a flag's configured release policy. Returns null if none is set (404). */
+export async function getReleasePolicy(
+  ld: LdClient,
+  flagKey: string,
+  environmentKey: string,
+): Promise<ReleasePolicy | null> {
+  const res = await ld.request<RawReleaseSettings>({
+    path: releaseSettingsPath(ld.projectKey, flagKey, environmentKey),
+    headers: BETA_HEADER,
+    okStatuses: [404],
+  });
+  if (res.status === 404) return null;
+  return normalizeReleasePolicy(res.data);
 }
 
 /** Poll an automated release until it reaches a terminal state or times out. */

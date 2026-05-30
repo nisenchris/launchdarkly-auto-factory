@@ -63,13 +63,11 @@ work lives in the milestones in `docs/build-checklist.md`; this file is the "don
 
 ## OPEN QUESTIONS — partial info
 
-### I5. Reading a flag's release policy
-- **What:** Where a flag's release policy (default stages/metrics/randomization unit) lives and how to
-  read it, plus exact override precedence vs. `.release-flags` overrides.
-- **Status:** the reference points to a `release-settings`-style endpoint; not yet confirmed against the
-  target instance. Beacon currently applies `.release-flags` overrides directly; reading the underlying
-  policy is the missing half.
-- **Unblock:** confirm the read endpoint (likely in `reference-private/internal-apis/ld-openapi-hidden.json`).
+### I5. Reading a flag's release policy — RESOLVED
+- **Built:** `getReleasePolicy` + `normalizeReleasePolicy` (`releaseAdapter.ts`) read the flag's
+  release-settings (endpoint confirmed in the OpenAPI; beta/internal path quarantined in the adapter).
+  Beacon's trigger applies precedence **overrides > policy > demo defaults**; unit-tested.
+- **Residual:** it's a beta/internal read endpoint — verify against the live instance when reachable.
 
 ### I6. Approval-mode flag evaluation context
 - **What:** The exact LD context for the per-repo approval-mode flag (kind/key, server-side SDK vs REST

@@ -8,11 +8,13 @@
  */
 
 import {
+  getReleasePolicy,
   startRelease,
   type DiscoveredFlag,
   type LdClient,
   type MetricRef,
   type ReleaseKind,
+  type ReleasePolicy,
   type Stage,
 } from "@auto-factory/shared";
 
@@ -49,12 +51,21 @@ export async function triggerRelease(
     );
   }
 
+  // Defaults precedence: .release-flags overrides > the flag's release policy > demo defaults.
+  let policy: ReleasePolicy | null = null;
+  try {
+    policy = await getReleasePolicy(ld, flag.flagKey, environmentKey);
+  } catch {
+    policy = null; // policy read is best-effort; fall back to demo defaults
+  }
+
   const ov = flag.releaseOverrides ?? {};
-  const metricKeys = ov.metricKeys ?? [];
-  const metricGroupKeys = ov.metricGroupKeys ?? [];
+  const metricKeys = ov.metricKeys ?? policy?.metricKeys ?? [];
+  const metricGroupKeys = ov.metricGroupKeys ?? policy?.metricGroupKeys ?? [];
   const hasMetrics = metricKeys.length > 0 || metricGroupKeys.length > 0;
 
-  const method: ReleaseKind = ov.releaseMethod ?? (hasMetrics ? "guarded" : "progressive");
+  const method: ReleaseKind =
+    ov.releaseMethod ?? policy?.releaseMethod ?? (hasMetrics ? "guarded" : "progressive");
 
   if (method === "immediate") {
     await ld.patchFlagSemantic(
@@ -76,8 +87,8 @@ export async function triggerRelease(
   const metricMonitoringPreferences: Record<string, { autoRollback: boolean }> = {};
   for (const m of metrics) metricMonitoringPreferences[m.key] = { autoRollback: true };
 
-  const stages = ov.stages ?? DEFAULT_STAGES;
-  const usedDefaults = !ov.stages;
+  const stages = ov.stages ?? policy?.stages ?? DEFAULT_STAGES;
+  const usedDefaults = !ov.stages && !policy?.stages;
 
   await startRelease(ld, {
     flagKey: flag.flagKey,
@@ -85,7 +96,7 @@ export async function triggerRelease(
     releaseKind: method,
     originalVariationId: offVar._id,
     targetVariationId: onVar._id,
-    randomizationUnit: ov.randomizationUnit ?? DEFAULT_RANDOMIZATION_UNIT,
+    randomizationUnit: ov.randomizationUnit ?? policy?.randomizationUnit ?? DEFAULT_RANDOMIZATION_UNIT,
     stages,
     ...(ov.extensionDurationMillis !== undefined
       ? { extensionDurationMillis: ov.extensionDurationMillis }
@@ -98,6 +109,6 @@ export async function triggerRelease(
   return {
     flagKey: flag.flagKey,
     method,
-    ...(usedDefaults ? { note: "used demo default stages (no overrides/policy — ISSUES I5)" } : {}),
+    ...(usedDefaults ? { note: "used demo default stages (no overrides or policy stages)" } : {}),
   };
 }

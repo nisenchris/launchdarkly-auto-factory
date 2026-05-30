@@ -48,7 +48,7 @@ on earlier ones. Spikes (§S) should be resolved before the milestone that depen
   - ⚠️ These read endpoints are **internal-for-now + require `LD-API-Version: beta`** and are mid-rename
     (will go public, shape may change) → **isolate behind the M2 release adapter** so the path/shape
     change lands in one place.
-  - [ ] Confirm where a flag's "release policy" lives and how to read it (+ override precedence)
+  - [x] Release policy read (`getReleasePolicy`) + precedence overrides > policy > demo defaults (I5)
 - [ ] 🔬 **Agent-graph CRUD via API** *(gates M3 bridge)* — MCP exposes AI-config CRUD; confirm graph
       create/update path (else push graphs via REST)
 - [ ] **Decide code-delivery mechanism** for the flagging agent's code changes: GitHub suggestions,
@@ -179,7 +179,7 @@ pipeline system.
       endpoint, verifies the `.release-flags/` file is present there; trigger if yes, wait if no
 - [x] **Release trigger** → shared release adapter: immediate (targeting flip) vs. guarded/progressive
       `startAutomatedRelease`; resolves boolean flag variation IDs; metrics + monitoring prefs;
-      `.release-flags` overrides applied
+      defaults precedence **overrides > flag release policy (`getReleasePolicy`) > demo defaults**
 - [~] **Monitor**: `monitorRelease` exists in the adapter; Beacon currently fires-and-returns (doesn't
       block on monitoring). Wire-in deferred.
 - [ ] **Backstop** for the fullstack "wait" path (retry/timeout) — not yet (relies on re-notification)
