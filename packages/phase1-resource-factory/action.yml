@@ -12,6 +12,9 @@ inputs:
   ld_project_key:
     description: "Target LaunchDarkly project key."
     required: true
+  ld_project_slug:
+    description: "Internal LaunchDarkly project ID, sent as Vega dispatch project_slug (distinct from ld_project_key). Falls back to ld_project_key if unset."
+    required: false
   ld_base_url:
     description: "LaunchDarkly API base URL."
     required: false
@@ -30,7 +33,7 @@ inputs:
     description: "Vega auth credential."
     required: false
   vega_auth_header:
-    description: "Auth header name for Vega (default Authorization)."
+    description: "Auth header name for Vega. Defaults to Authorization; set to the deployment's header when non-standard."
     required: false
   github_token:
     description: "Token for posting the PR summary comment."

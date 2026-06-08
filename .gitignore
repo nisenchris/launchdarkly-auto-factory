@@ -21,7 +21,19 @@ __pycache__/
 *.pyc
 .pytest_cache/
 
+# Exception: the Phase 1 action's esbuild bundle MUST be committed so
+# `uses: <owner>/launchdarkly-auto-factory/packages/phase1-resource-factory@ref`
+# resolves (GitHub runs the prebuilt `main:` bundle). Only the bundle, not the
+# rest of dist/. Rebuild with `npm run bundle -w @auto-factory/phase1-resource-factory`.
+!packages/phase1-resource-factory/dist/
+packages/phase1-resource-factory/dist/*
+!packages/phase1-resource-factory/dist/action.bundle.js
+
 # --- Editor / OS ---
 .DS_Store
 *.swp
 examples/demo-app/README.md
+
+docs/build-checklist.md
+docs/demo-punchlist.md
+docs/ISSUES.md

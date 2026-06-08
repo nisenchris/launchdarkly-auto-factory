@@ -1,0 +1,57 @@
+{
+  "key": "gha-auto-factory",
+  "name": "GHA AutoFactory",
+  "description": "Agent graph that represents the chain of agents in the GHA version of AutoFactory",
+  "rootConfigKey": "autofactory-research-planner",
+  "edges": [
+    {
+      "key": "edge-autofactory-flag-testing-autofactory-code-reviewer",
+      "sourceConfig": "autofactory-flag-testing",
+      "targetConfig": "autofactory-code-reviewer",
+      "handoff": {
+        "max_turns": 15,
+        "prompt_template": "{{PR_NUMBER}}",
+        "request_type": "Fix"
+      }
+    },
+    {
+      "key": "edge-autofactory-research-planner-autofactory-flag-implementer",
+      "sourceConfig": "autofactory-research-planner",
+      "targetConfig": "autofactory-flag-implementer",
+      "handoff": {
+        "max_turns": 20,
+        "prompt_template": "{{PR_NUMBER}}",
+        "request_type": "Fix",
+        "skip_if_tags": {
+          "skip_flagging": "true"
+        }
+      }
+    },
+    {
+      "key": "edge-autofactory-metrics-author-autofactory-flag-testing",
+      "sourceConfig": "autofactory-metrics-author",
+      "targetConfig": "autofactory-flag-testing",
+      "handoff": {
+        "max_turns": 20,
+        "prompt_template": "{{PR_NUMBER}}",
+        "request_type": "Fix",
+        "require_tags": {
+          "needs_tests": "true"
+        }
+      }
+    },
+    {
+      "key": "edge-autofactory-flag-implementer-autofactory-metrics-author",
+      "sourceConfig": "autofactory-flag-implementer",
+      "targetConfig": "autofactory-metrics-author",
+      "handoff": {
+        "max_turns": 20,
+        "prompt_template": "{{PR_NUMBER}}",
+        "request_type": "Fix",
+        "require_tags": {
+          "flag_created": "true"
+        }
+      }
+    }
+  ]
+}

@@ -36,7 +36,11 @@ function createVegaClient(): VegaClient {
       ...(process.env.VEGA_AUTH_HEADER ? { authHeaderName: process.env.VEGA_AUTH_HEADER } : {}),
       ...(process.env.VEGA_REQUEST_TYPE ? { requestType: process.env.VEGA_REQUEST_TYPE } : {}),
       ...(process.env.GITHUB_REPOSITORY ? { repositories: [process.env.GITHUB_REPOSITORY] } : {}),
-      ...(process.env.LD_PROJECT_KEY ? { projectSlug: process.env.LD_PROJECT_KEY } : {}),
+      // Dispatch's `project_slug` is the internal LD project ID — prefer LD_PROJECT_SLUG,
+      // fall back to the human project key only if the slug isn't provided.
+      ...(process.env.LD_PROJECT_SLUG ?? process.env.LD_PROJECT_KEY
+        ? { projectSlug: process.env.LD_PROJECT_SLUG ?? process.env.LD_PROJECT_KEY }
+        : {}),
     });
     return new VegaClient(transport);
   }
@@ -61,6 +65,7 @@ function mapActionInputs(): void {
   set("LD_API_KEY", "ld_api_key");
   set("LD_BASE_URL", "ld_base_url");
   set("LD_PROJECT_KEY", "ld_project_key");
+  set("LD_PROJECT_SLUG", "ld_project_slug");
   set("GRAPH_FILE", "graph_file");
   set("APPROVAL_MODE", "approval_mode");
   set("GITHUB_TOKEN", "github_token");

@@ -23,3 +23,11 @@ jobs:
         run: npm run check:public
       - name: Typecheck
         run: npm run typecheck
+      - name: Tests
+        run: npm test
+      - name: Action bundle is current
+        # The committed Phase 1 bundle must match source — rebuild and fail on drift.
+        run: |
+          npm run bundle -w @auto-factory/phase1-resource-factory
+          git diff --exit-code -- packages/phase1-resource-factory/dist/action.bundle.js \
+            || { echo "::error::action.bundle.js is stale — run 'npm run bundle -w @auto-factory/phase1-resource-factory' and commit."; exit 1; }

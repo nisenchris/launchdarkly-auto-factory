@@ -27,6 +27,10 @@ jobs:
         with:
           ld_api_key: ${{ secrets.LD_API_KEY }}
           ld_project_key: ${{ vars.LD_PROJECT_KEY }}
+          ld_project_slug: ${{ vars.LD_PROJECT_SLUG }}   # internal project ID for Vega dispatch
           graph_file: config/agentcontrol/graphs/auto-factory.json
           approval_mode: yolo
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # Vega dispatch (omit to run the no-op stub). vega_token defaults to ld_api_key.
+          vega_endpoint: ${{ vars.VEGA_ENDPOINT }}
+          vega_auth_header: ${{ vars.VEGA_AUTH_HEADER }}
