@@ -92,6 +92,19 @@ Status legend: ✅ done · 🔜 planned/in progress
     `commit_and_push`. NOTE: `ldcli` is LaunchDarkly's official CLI (not gonfalon) —
     this was a swap to our current tool, not a "fix." See backlog below.
 
+### ✅ 6. `run_tests` tool — testing agent runs what it writes (testing v5)
+- **Change:** Added a `run_tests` agent tool (auto-detects pytest / `npm test` / `go test`,
+  installs deps, returns pass/fail output), available to the edit-capable nodes. Testing
+  agent → **version 5**: write tests → `run_tests` → fix failures (imports, fixtures,
+  assertions) → only `commit_and_push` once green. Added guidance to ensure imports
+  resolve for how the runner is invoked (module path / `conftest.py`).
+- **Why:** The testing agent wrote tests it couldn't execute (no shell), so import/path
+  errors slipped through on every run and the reviewer (correctly) blocked them — PR #4
+  (test/impl fail-safe mismatch) and PR #5 (`from app import …` module-path error). Same
+  shape as the `git_diff` fix: give the agent the ability to verify its own output. This
+  is real code execution in the CI sandbox — the capability expansion we'd deliberately
+  deferred until now.
+
 ### 🔜 Backlog — consider `ldcli` for flag creation
 - Today the implementer creates flags via the REST-backed `create_flag` tool. Using
   LaunchDarkly's official CLI (`ldcli`) may be more efficient/idiomatic long-term.
