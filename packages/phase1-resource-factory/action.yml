@@ -1,42 +1,65 @@
 name: "LaunchDarkly Auto-Factory — Phase 1"
 description: >
-  On a pull request, a chain of LaunchDarkly-hosted agents (Vega) decides whether
-  the PR needs a feature flag, creates the flag + metrics, wires them into the
-  code, tests, and reviews — gated by an approval mode.
+  On a pull request, a chain of LaunchDarkly AI-config agents decides whether the
+  PR needs a feature flag, plans the flag + metrics + tests, and reviews — gated
+  by an approval mode. Runs natively on the LaunchDarkly SDKs; the
+  `auto-factory-ai-provider` flag selects the execution backend (Anthropic API by
+  default, or Vega).
+
 author: "LaunchDarkly"
 
 inputs:
-  ld_api_key:
-    description: "LaunchDarkly API key (write access to flags/metrics/AI configs)."
+  # --- Native LaunchDarkly SDK (factory / control-plane project) ---
+  ld_sdk_key:
+    description: "LaunchDarkly server SDK key (sdk-...) for the FACTORY project's environment. Reads the provider flag, agent graph, and agent configs."
     required: true
-  ld_project_key:
-    description: "Target LaunchDarkly project key."
-    required: true
-  ld_project_slug:
-    description: "Internal LaunchDarkly project ID, sent as Vega dispatch project_slug (distinct from ld_project_key). Falls back to ld_project_key if unset."
+  # --- Anthropic execution backend (default provider) ---
+  anthropic_api_key:
+    description: "Anthropic API key. Required when the auto-factory-ai-provider flag serves 'anthropic' (the default)."
     required: false
+  # --- App / data-plane project (where flags get created) ---
+  ld_app_project_key:
+    description: "LaunchDarkly project key where agents create flags (passed to agents as LAUNCHDARKLY_PROJECT)."
+    required: false
+    default: "autofactory-demo"
+  ld_api_key:
+    description: "LaunchDarkly API key (api-...) for REST writes such as flag creation in the app project."
+    required: false
+  enable_flag_creation:
+    description: "When 'true' (and ld_api_key is set), the flag-implementer creates real flags in the app project. 'false' = read-only dry-run."
+    required: false
+    default: "false"
   ld_base_url:
     description: "LaunchDarkly API base URL."
     required: false
     default: "https://app.launchdarkly.com"
-  graph_file:
-    description: "Path to the agent graph JSON to walk."
-    required: true
+  graph_key:
+    description: "Agent graph key to resolve from LaunchDarkly and walk."
+    required: false
+    default: "gha-auto-factory"
+  sandbox_root:
+    description: "Repo path the read-only agent tools inspect. Defaults to the checked-out workspace root."
+    required: false
+    default: "."
   approval_mode:
     description: "yolo | middle | manual (default yolo)."
     required: false
     default: "yolo"
+  github_token:
+    description: "Token for posting the PR summary comment."
+    required: false
+  # --- Vega backend (only used when the provider flag serves 'vega') ---
   vega_endpoint:
     description: "Vega agent-dispatch GraphQL endpoint (deployment-specific)."
     required: false
   vega_token:
-    description: "Vega auth credential."
+    description: "Vega auth credential (defaults to ld_api_key)."
     required: false
   vega_auth_header:
-    description: "Auth header name for Vega. Defaults to Authorization; set to the deployment's header when non-standard."
+    description: "Auth header name for Vega (defaults to Authorization)."
     required: false
-  github_token:
-    description: "Token for posting the PR summary comment."
+  ld_project_slug:
+    description: "Internal LaunchDarkly project ID, sent as Vega dispatch project_slug."
     required: false
 
 runs:

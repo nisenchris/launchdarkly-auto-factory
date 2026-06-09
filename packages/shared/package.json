@@ -15,6 +15,9 @@
     "build": "tsc -b"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
+    "@launchdarkly/node-server-sdk": "^9.11.2",
+    "@launchdarkly/server-sdk-ai": "^1.1.0",
     "yaml": "^2.5.0"
   }
 }

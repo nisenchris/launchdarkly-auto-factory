@@ -46,13 +46,26 @@ export interface LdConnection {
   projectKey: string;
 }
 
-/** The target project the prototype reads from and writes to. */
+/** The factory/control-plane project (AI configs, graph, control flags). */
 export function targetConnection(): LdConnection {
   loadDotEnv();
   return {
     apiKey: required("LD_API_KEY"),
     baseUrl: (process.env.LD_BASE_URL || "https://app.launchdarkly.com").replace(/\/+$/, ""),
     projectKey: required("LD_PROJECT_KEY"),
+  };
+}
+
+/**
+ * The app/data-plane project where agents CREATE flags (and Phase 2 releases).
+ * Uses the same `api-` key but targets LD_APP_PROJECT_KEY (falls back to LD_PROJECT_KEY).
+ */
+export function appConnection(): LdConnection {
+  loadDotEnv();
+  return {
+    apiKey: required("LD_API_KEY"),
+    baseUrl: (process.env.LD_BASE_URL || "https://app.launchdarkly.com").replace(/\/+$/, ""),
+    projectKey: process.env.LD_APP_PROJECT_KEY || required("LD_PROJECT_KEY"),
   };
 }
 

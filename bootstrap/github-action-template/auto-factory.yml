@@ -1,7 +1,10 @@
-# Drop this into a partner repo at .github/workflows/auto-factory.yml
+# Drop this into your app repo (e.g. autofactory-demo) at
+#   .github/workflows/auto-factory.yml
 #
 # Phase 1 runs automatically on every PR (opened/updated) — NO label gate.
-# Open a PR and the agents do the rest.
+# Open a PR and the agent chain does the rest. The agents run on the Anthropic
+# API by default (the `auto-factory-ai-provider` flag selects the backend; flip
+# it to "vega" in LaunchDarkly to switch — no workflow change needed).
 
 name: LaunchDarkly Auto-Factory
 
@@ -10,7 +13,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write        # agents may wire flags into the PR branch
+  contents: read         # agents inspect the PR code (read-only this phase)
   pull-requests: write   # post the summary comment
 
 jobs:
@@ -22,15 +25,22 @@ jobs:
           fetch-depth: 0
 
       - name: LaunchDarkly Auto-Factory — Phase 1
-        # Replace <owner> with the repo hosting this action (subdir action ref).
+        # Replace <owner> with the org/user hosting the auto-factory repo.
         uses: <owner>/launchdarkly-auto-factory/packages/phase1-resource-factory@main
         with:
+          # Native LaunchDarkly SDK — server SDK key for the FACTORY project
+          # (holds the AI configs, agent graph, and the provider flag).
+          ld_sdk_key: ${{ secrets.LD_SDK_KEY }}
+          # Anthropic backend (default provider).
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # APP / data-plane project where flags get created (and Phase 2 releases).
+          ld_app_project_key: ${{ vars.LD_APP_PROJECT_KEY }}   # e.g. autofactory-demo
+          # api- key for flag creation in the app project.
           ld_api_key: ${{ secrets.LD_API_KEY }}
-          ld_project_key: ${{ vars.LD_PROJECT_KEY }}
-          ld_project_slug: ${{ vars.LD_PROJECT_SLUG }}   # internal project ID for Vega dispatch
-          graph_file: config/agentcontrol/graphs/auto-factory.json
+          # Create REAL flags in the app project (set "false" for a read-only dry-run).
+          enable_flag_creation: "true"
+          graph_key: gha-auto-factory
           approval_mode: yolo
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # Vega dispatch (omit to run the no-op stub). vega_token defaults to ld_api_key.
-          vega_endpoint: ${{ vars.VEGA_ENDPOINT }}
-          vega_auth_header: ${{ vars.VEGA_AUTH_HEADER }}
+          # To run on Vega instead, set the auto-factory-ai-provider flag to "vega"
+          # in LaunchDarkly and supply: vega_endpoint / vega_auth_header.

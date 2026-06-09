@@ -7,3 +7,21 @@ export * from "./ldClient.js";
 export * from "./releaseAdapter.js";
 export * from "./vegaClient.js";
 export * from "./vegaTransport.js";
+export * from "./ldSdk.js";
+export * from "./agentRunner.js";
+// Re-export the LaunchDarkly AI SDK types the graph walker consumes, so the
+// phase-1 package depends only on @auto-factory/shared.
+export type {
+  AgentGraphDefinition,
+  AgentGraphNode,
+  LDAgentGraphFlagValue,
+  LDAIAgentConfig,
+  LDAIConfigTracker,
+  LDGraphEdge,
+  LDGraphTracker,
+} from "@launchdarkly/server-sdk-ai";
+export * from "./vegaAgentRunner.js";
+export * from "./providerFlag.js";
+export * from "./anthropic/sandboxTools.js";
+export * from "./anthropic/ldWriter.js";
+export * from "./anthropic/anthropicAgentRunner.js";
