@@ -52,7 +52,13 @@ export function interpretWalk(tags: Record<string, string>): {
   reviewApproved: boolean;
   risk?: RiskLevel;
 } {
-  const decision = (tags.review_decision ?? tags.decision ?? tags.approved ?? "").toLowerCase();
+  const decision = (
+    tags.review_approved ??
+    tags.review_decision ??
+    tags.decision ??
+    tags.approved ??
+    ""
+  ).toLowerCase();
   const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
   const rawRisk = (tags.risk ?? tags.risk_level ?? "").toLowerCase();
   const risk: RiskLevel | undefined =
