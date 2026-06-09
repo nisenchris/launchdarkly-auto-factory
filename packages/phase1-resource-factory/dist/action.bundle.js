@@ -35966,7 +35966,7 @@ function decideApproval(mode, reviewApproved, risk) {
   }
 }
 function interpretWalk(tags) {
-  const decision = (tags.review_decision ?? tags.decision ?? tags.approved ?? "").toLowerCase();
+  const decision = (tags.review_approved ?? tags.review_decision ?? tags.decision ?? tags.approved ?? "").toLowerCase();
   const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
   const rawRisk = (tags.risk ?? tags.risk_level ?? "").toLowerCase();
   const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
