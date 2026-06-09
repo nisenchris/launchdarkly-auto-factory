@@ -71,3 +71,28 @@ Status legend: ✅ done · 🔜 planned/in progress
      follow the analysis, not precede it.)
 - **Why:** Treat the cause (can't see the diff), not the symptom (turn cap). Turns
   raised to 30 (see #2) as a secondary cushion.
+- **Validated:** demo PR #4 (`/api/quote`) — reviewer ran to completion, called
+  `git_diff`, and returned an accurate verdict (REJECT, 2 BLOCKING) catching a real
+  test/impl mismatch. See #5.
+
+### ✅ 5. Flag Implementer (`autofactory-flag-implementer`) — fail-safe eval + tool-accurate (v2)
+- **Primary change (Task #3):** flag evaluation must FAIL SAFE — any error from the
+  flag-eval client falls back to the control/default variation (try/except in
+  Python, handle the error return in Go, catch in TS); harden the shared eval
+  helper if it lacks this. Keeps the implementation consistent with the testing
+  agent's resilience tests (the gap the reviewer caught on PR #4: the test asserted
+  graceful degradation that `_flag()` didn't implement).
+- **Incidental cleanup (made in the same edit):**
+  - Removed the gonfalon-specific SDK-helper patterns (`createFlagFunction` /
+    `@gonfalon/dogfood-flags`, `flagfn.NewBool` / `OnErrorLogAsError`), the
+    `make go-generate` "Code Generation" section, and the `/app/run_validation.sh`
+    "Validation" step — none apply in this runtime. Replaced with "match the repo's
+    existing flag pattern."
+  - Swapped `ldcli flags create` → the in-runtime `create_flag` tool, and push →
+    `commit_and_push`. NOTE: `ldcli` is LaunchDarkly's official CLI (not gonfalon) —
+    this was a swap to our current tool, not a "fix." See backlog below.
+
+### 🔜 Backlog — consider `ldcli` for flag creation
+- Today the implementer creates flags via the REST-backed `create_flag` tool. Using
+  LaunchDarkly's official CLI (`ldcli`) may be more efficient/idiomatic long-term.
+  Revisit once the core chain is stable. (https://launchdarkly.com/docs/home/getting-started/ldcli)
