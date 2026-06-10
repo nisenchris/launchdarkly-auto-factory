@@ -9,7 +9,7 @@
       "sourceConfig": "autofactory-flag-testing",
       "targetConfig": "autofactory-code-reviewer",
       "handoff": {
-        "max_turns": 15,
+        "max_turns": 30,
         "request_type": "Fix"
       }
     },

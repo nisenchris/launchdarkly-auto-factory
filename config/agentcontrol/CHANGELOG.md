@@ -15,6 +15,69 @@ Status legend: ✅ done · 🔜 planned/in progress
 
 ---
 
+## 2026-06-10
+
+### ✅ Synced the live `gha-auto-factory` graph with the committed copy (capabilities now live)
+- **Change:** Full-object REST PATCH of the live graph: added the `capabilities`
+  grants to three edges (→flag-implementer `["create_flag","edit_files"]`,
+  →metrics-author `["create_metric","edit_files"]`, →flag-testing `["edit_files"]`)
+  and removed the inert `prompt_template` from every edge (completes CLEANUP #28 on
+  the live side). Kept the live `max_turns` values.
+- **Why this matters:** the action resolves the graph **live** via the AI SDK's
+  `agentGraph()` — the committed `graphs/auto-factory.json` is a record, not the
+  runtime source. Until this PATCH, the edge grants only existed in the committed
+  copy and the runner was riding on its hardcoded `NODE_CAPABILITIES` fallback.
+- **Reconciliation:** the committed copy's testing→code-reviewer `max_turns` was 15
+  while live ran 30; updated the committed file to 30 so the record matches reality.
+
+### ✅ Rewrote the live `autofactory-research-planner` instructions for the Anthropic tool surface
+- **Change:** Replaced the `default` variation's instructions (now v2). The Vega-era
+  original is preserved as the `default-configuration-copy` variation (see the
+  variation-pattern entry below).
+- **What changed:** tool references fixed (`git_diff`/`read_file`/`list_dir`/`grep`
+  instead of `Read`/`Glob`/`Bash` + `gh pr diff`); dropped the four interpolation
+  variables the action never supplies (`FILES_CHANGED_COUNT`, `LINES_CHANGED`,
+  `CHANGED_FILES_SUMMARY`, `CI_CONTEXT`) — `git_diff` is the changed-files source now;
+  replaced the internal-monorepo "Repo Structure Reference" (and `flagfn.NewBool` /
+  `createFlagFunction` patterns) with repo-agnostic detect-from-the-code guidance;
+  added an explicit Chain Routing Tags section (`flag_worthy`, and `skip_flagging`
+  documented as a chain short-circuit — the old text wrongly said the planner's output
+  was "NOT a routing decision").
+- **Kept:** the two-phase research → brief structure, classification taxonomy, and the
+  flag/test/review brief fields downstream agents parse.
+
+### ✅ Pattern: per-provider variations on each AI config
+- **Decision:** each `autofactory-*` config keeps its **`default` variation as the
+  Anthropic-surface instructions** (the current primary path) and a separate
+  **Vega-surface variation** (e.g. "Vega Chain" / "Default Configuration - Copy")
+  preserving the Bash/MCP-tooling instructions. Later, targeting can serve the right
+  variation off the `auto-factory-ai-provider` flag so instructions switch with the
+  execution backend. No targeting changes yet — Anthropic stays the served default.
+
+### ✅ Rewrote the live `autofactory-metrics-author` instructions for the Anthropic tool surface
+- **Change:** Replaced the `default` variation's instructions (now v2, renamed
+  "Vega Chain" → "Default Configuration"). This is the "separate config update
+  entry" promised by the 2026-06-09 `create_metric` code entry below.
+- **What changed in the instructions:**
+  - Dropped the Vega Environment section (clone-the-repo, `/workspace`, git identity)
+    — the Anthropic runner operates in the pre-checked-out PR branch.
+  - Tool surface is now the real sandbox set: `read_file`/`list_dir`/`grep`/`git_diff`/
+    `tag_conversation` + granted `create_metric`/`edit_file`/`write_file`/`run_tests`/
+    `commit_and_push`. No Bash/curl REST payloads (the `create_metric` tool owns the
+    category → LD metric-shape mapping), no LD/observability MCP tools.
+  - Reuse-first (M02/M07) reworded for what the agent can actually see: code-level
+    reuse (existing `track()` events on the flagged path) + `create_metric`
+    idempotency, instead of `launchdarkly_list_metrics` / trace queries.
+  - Kept: guarded-release framing, M-rules, the three categories, killswitch/pause/
+    monitoring classification, naming convention, manifest loop-closure
+    (`releaseOverrides.metricKeys` + `randomizationUnit`), chain output + routing tags.
+  - New: latency events must pass elapsed ms as the `track()` metric value; M01 skip
+    now explicitly tags `metrics_created=false` + `needs_tests=true`; notes that
+    `create_metric` auto-sets `metrics_created`/`metric_keys`.
+- **Why:** the old instructions were written for the Vega runtime; on the Anthropic
+  provider the agent degraded to a markdown spec (demo PR #8). Pairs with the
+  `create_metric` capability + graph-edge grant in the entry below.
+
 ## 2026-06-09
 
 ### ✅ Metrics Author can now actually create metrics on the Anthropic path
