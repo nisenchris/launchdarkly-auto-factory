@@ -103,11 +103,12 @@ describe("LdResourceWriter.createMetric", () => {
       eventKey: "e",
       category: "error",
       randomizationUnit: "account",
-      tags: ["flag:enable-x"],
+      // LaunchDarkly tags cannot contain ":" — the flag-reference convention is flag-<key>
+      tags: ["flag-enable-x"],
     });
     const b = body();
     assert.deepEqual(b?.randomizationUnits, ["account"]);
-    assert.deepEqual([...(b?.tags as string[])].sort(), ["auto-factory", "auto-generated", "flag:enable-x"]);
+    assert.deepEqual([...(b?.tags as string[])].sort(), ["auto-factory", "auto-generated", "flag-enable-x"]);
   });
 
   it("reports alreadyExists on 409", async () => {

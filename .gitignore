@@ -48,3 +48,7 @@ docs/build-checklist.md
 docs/demo-punchlist.md
 docs/ISSUES.md
 docs/demo-pipeline-runbook.md
+docs/phase2-unknowns.md
+
+# Beacon's local deploy-state store (BEACON_STATE_FILE default)
+beacon-state.json
