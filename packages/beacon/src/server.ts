@@ -190,7 +190,11 @@ export function createApp(cfg: BeaconConfig, ld: LdClient, deps: BeaconDeps = {}
       return res.status(200).json({ ignored: true, reason: parsed.reason });
     }
     if (parsed.kind === "unrecognized") {
-      console.warn(`[beacon] unrecognized Railway webhook: ${parsed.reason}`);
+      // Log the full payload: deploy events aren't sensitive, and the exact
+      // shape is what's needed to extend the parser for a new schema.
+      console.warn(
+        `[beacon] unrecognized Railway webhook: ${parsed.reason} — payload: ${JSON.stringify(req.body).slice(0, 2000)}`,
+      );
       return res.status(422).json({ error: "unrecognized Railway payload", reason: parsed.reason });
     }
     // Railway environment names are Railway-side concepts; releases target the
