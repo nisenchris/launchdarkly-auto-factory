@@ -17,6 +17,16 @@ Status legend: ✅ done · 🔜 planned/in progress
 
 ## 2026-06-10
 
+### ✅ Metrics-author tag convention: `flag:<flag-key>` → `flag-<flag-key>`
+- **Change:** Updated BOTH `autofactory-metrics-author` variations (`default` and the
+  preserved "Vega Chain" copy): the flag-reference tag convention is now
+  `flag-<flag-key>` with an explicit "LaunchDarkly tags cannot contain `:`" note.
+- **Why:** observed on demo PR #9 — the instructions said `flag:enable-...` but the
+  metric landed with `flag-enable-color-endpoint` because LD tag validation rejects
+  colons. The convention now matches what actually gets stored, so the future metric
+  cleanup job can rely on a mechanical prefix scan. Repo-side, the `ldWriter` test's
+  example tag was aligned to the valid form.
+
 ### ✅ Synced the live `gha-auto-factory` graph with the committed copy (capabilities now live)
 - **Change:** Full-object REST PATCH of the live graph: added the `capabilities`
   grants to three edges (→flag-implementer `["create_flag","edit_files"]`,

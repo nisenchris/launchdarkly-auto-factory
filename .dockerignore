@@ -1,0 +1,11 @@
+# Keep secrets, local state, and non-runtime material out of images.
+.env
+.env.*
+beacon-state.json
+node_modules
+.git
+reference-private
+docs
+tests
+.github
+*.tsbuildinfo

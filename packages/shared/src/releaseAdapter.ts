@@ -215,6 +215,29 @@ export async function getReleasePolicy(
   return normalizeReleasePolicy(res.data);
 }
 
+/** Path for listing a flag's automated releases across environments (beta/internal). */
+function flagAutomatedReleasesPath(projectKey: string, flagKey: string): string {
+  return `/internal/projects/${projectKey}/flags/${flagKey}/automated-releases`;
+}
+
+/**
+ * Find the in-progress automated release for a flag in an environment, or null.
+ * `startRelease` doesn't return the release id (the semantic patch responds with
+ * the flag), so this is how a caller obtains the id to monitor.
+ */
+export async function findActiveRelease(
+  ld: LdClient,
+  flagKey: string,
+  environmentKey: string,
+): Promise<AutomatedRelease | null> {
+  const filter = encodeURIComponent(`environmentKey:${environmentKey},status:in_progress`);
+  const res = await ld.request<{ items?: AutomatedRelease[] }>({
+    path: `${flagAutomatedReleasesPath(ld.projectKey, flagKey)}?filter=${filter}&limit=1`,
+    headers: BETA_HEADER,
+  });
+  return res.data.items?.[0] ?? null;
+}
+
 /** Poll an automated release until it reaches a terminal state or times out. */
 export async function monitorRelease(
   ld: LdClient,

@@ -4,17 +4,20 @@
 # its code + `.release-flags/` live in, and a status endpoint that reports the
 # service's currently-deployed SHA (used for fullstack cross-service checks).
 #
+# Keys must match the service name a deploy notification carries — for the
+# Railway adapter that's the Railway service name verbatim.
+#
 # This generalizes the reference (which hardcoded specific service names).
 
 services:
   demo-frontend:
     side: frontend
-    repo: your-org/your-repo        # owner/name
-    statusUrl: https://demo-frontend.up.railway.app/api/status
+    repo: ttotenberg-ld/launchdarkly-autofactory-demo
+    statusUrl: https://demo-frontend-production-a9a3.up.railway.app/api/status
     statusShaField: version         # JSON field on the status response holding the deployed SHA
 
   demo-backend:
     side: backend
-    repo: your-org/your-repo
-    statusUrl: https://demo-backend.up.railway.app/api/status
+    repo: ttotenberg-ld/launchdarkly-autofactory-demo
+    statusUrl: https://demo-backend-production-0173.up.railway.app/api/status
     statusShaField: version
