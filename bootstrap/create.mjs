@@ -2,18 +2,18 @@
 /**
  * One-command bootstrap (`npm run bootstrap`):
  *   1. build the workspace if needed
- *   2. preflight checks (Node, LD env, LD reachability) — fail loudly
+ *   2. preflight checks (Node, LD env, LD reachability); fail loudly
  *   3. provision agent configs + graph into the target project (via the bridge)
  *   4. print the remaining manual steps (drop in the workflow, set secrets)
  *
  * Defaults are one layer deep: this generates/uses the real config files in
- * config/ that a partner then edits — no hidden magic.
+ * config/ that a partner then edits, no hidden magic.
  */
 
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-console.log("LaunchDarkly Auto-Factory — bootstrap\n");
+console.log("LaunchDarkly Auto-Factory bootstrap\n");
 
 // 1. Ensure build output exists before importing built packages.
 if (!existsSync("packages/config-bridge/dist/cli.js") || !existsSync("packages/shared/dist/index.js")) {
@@ -21,7 +21,7 @@ if (!existsSync("packages/config-bridge/dist/cli.js") || !existsSync("packages/s
   execSync("npm run build", { stdio: "inherit" });
 }
 
-// 2. Preflight (dynamic import — depends on the build above).
+// 2. Preflight (dynamic import; depends on the build above).
 const { preflight } = await import("./checks/preflight.mjs");
 console.log("Preflight checks:");
 const { ok, issues, notes } = await preflight();
@@ -40,7 +40,7 @@ if (issues.length) {
 const hasSource =
   process.env.LD_SOURCE_API_KEY && process.env.LD_SOURCE_BASE_URL && process.env.LD_SOURCE_PROJECT_KEY;
 if (hasSource) {
-  console.log("\nLD_SOURCE_* configured — seeding agent configs + graph from the source project…");
+  console.log("\nLD_SOURCE_* configured: seeding agent configs + graph from the source project…");
   execSync("node packages/config-bridge/dist/cli.js seed", { stdio: "inherit" });
 } else {
   console.log("\nProvisioning agent configs + graph from local config/agentcontrol/…");
@@ -57,12 +57,12 @@ Next steps:
      Add repo variable:   LD_APP_PROJECT_KEY  (e.g. autofactory-demo)
      (GITHUB_TOKEN is provided automatically by GitHub Actions. For Phase 2, also
       add BEACON_WEBHOOK_SECRET.)
-  3. Open a PR — Phase 1 runs automatically.
+  3. Open a PR. Phase 1 runs automatically.
 ${
   hasSource
     ? ""
     : `
-Note: the AI configs are NOT committed to this repo — config/agentcontrol/ai-configs/
-is intentionally empty. To get a runnable pipeline, set LD_SOURCE_* in .env and re-run
-bootstrap to SEED the live graph + configs from the prototype project.`
+Provisioned from the committed definitions in config/agentcontrol/ (the canonical
+public copies). The agent instructions are editable in the LaunchDarkly UI afterward;
+the pipeline reads them at run time.`
 }`);

@@ -17,6 +17,15 @@ Status legend: ✅ done · 🔜 planned/in progress
 
 ## 2026-06-11
 
+### ✅ Committed the canonical public copies of all five agent configs
+- **Change:** exported each `autofactory-*` config's `default` (Anthropic) variation
+  from the live project into `config/agentcontrol/ai-configs/*.json` (provision
+  format). Versions at export: planner v2, implementer v4, metrics-author v5,
+  testing v5, reviewer v3. Vega variations stay live-only (internal runtime details).
+- **Why:** external consumers provision from these files (`npm run bootstrap`);
+  the directory was intentionally empty before (old I3). Convention going forward:
+  edit in LD → re-export here → log in this changelog.
+
 ### ✅ Code reviewer: metric-key vs event-key convention (false-positive REJECT fix)
 - **Problem:** on demo PR #10 the reviewer REJECTED (risk high) because the code's
   `track()` events (`enable-haiku-endpoint-error`) didn't string-match the metric

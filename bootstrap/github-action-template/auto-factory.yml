@@ -1,12 +1,11 @@
-# Drop this into your app repo (e.g. autofactory-demo) at
-#   .github/workflows/auto-factory.yml
+# Drop this into your app repo at .github/workflows/auto-factory.yml
 #
-# Phase 1 runs automatically on every PR (opened/updated) — NO label gate.
-# The agent chain runs on the Anthropic API by default (the
-# `auto-factory-ai-provider` flag selects the backend; flip it to "vega" in
-# LaunchDarkly to switch — no workflow change needed). With flag creation and
-# code changes enabled, the flag-implementer creates a real flag, wires it into
-# the code, and pushes to the PR branch; the testing agent adds tests.
+# Phase 1 runs on every PR (opened/updated); there is no label gate. The agent
+# chain runs on the Anthropic API by default. The auto-factory-ai-provider flag
+# in the factory project selects the backend; it is optional and defaults to
+# "anthropic" when absent. With flag creation and code changes enabled, the
+# agents create a real flag (targeting off), wire it into the code, instrument
+# metrics, add tests, and push to the PR branch.
 
 name: LaunchDarkly Auto-Factory
 
@@ -15,7 +14,7 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: write        # agents wire the flag into the code and push to the PR branch
+  contents: write        # agents commit flag wiring, metrics, and tests to the PR branch
   pull-requests: write   # post the summary comment
 
 jobs:
@@ -25,24 +24,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # Check out the PR's head branch (not the detached merge ref) so the
-          # agents can commit + push wiring/tests back to the PR.
+          # agents can commit and push back to the PR.
           ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
-      - name: LaunchDarkly Auto-Factory — Phase 1
-        # Replace <owner> with the org/user hosting the auto-factory repo.
+      - name: LaunchDarkly Auto-Factory Phase 1
+        # Replace <owner> with the org or user hosting the auto-factory repo.
         uses: <owner>/launchdarkly-auto-factory/packages/phase1-resource-factory@main
         with:
           ld_sdk_key: ${{ secrets.LD_SDK_KEY }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           ld_app_project_key: ${{ vars.LD_APP_PROJECT_KEY }}   # e.g. autofactory-demo
           ld_api_key: ${{ secrets.LD_API_KEY }}
-          enable_flag_creation: "true"   # create REAL flags in the app project
-          enable_code_changes: "true"    # wire the flag into the code + push; add tests
+          enable_flag_creation: "true"   # create real flags/metrics in the app project
+          enable_code_changes: "true"    # commit wiring + tests to the PR branch
           pr_branch: ${{ github.event.pull_request.head.ref }}
           pr_base: ${{ github.event.pull_request.base.ref }}
           graph_key: gha-auto-factory
           approval_mode: yolo
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # To run on Vega instead, set the auto-factory-ai-provider flag to "vega"
-          # in LaunchDarkly and supply: vega_endpoint / vega_auth_header.

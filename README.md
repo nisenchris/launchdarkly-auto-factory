@@ -1,69 +1,156 @@
-# LaunchDarkly Auto-Factory
+# LaunchDarkly AutoFactory
 
-An early **prototype** of fully autonomous, safe software releases using LaunchDarkly as the
-primary production safety layer. Shared with early design partners; directionally accurate but
-not the final product.
+Prototype of autonomous, safe software releases. A chain of LaunchDarkly-defined AI agents
+turns a plain pull request into a feature-flagged, metric-instrumented, tested change, and a
+release orchestrator turns the eventual deploy into a guarded rollout that monitors itself.
 
-- **Phase 1 — Automatic resource creation:** in CI, a graph of agents researches a PR, decides
-  whether it needs a flag, and (if so) creates the flag + metrics and wires them into the code,
-  gated by an approval mode. Execution is provider-agnostic: the `auto-factory-ai-provider`
-  LaunchDarkly flag selects the backend — the **default is a local Anthropic tool-use loop**;
-  LaunchDarkly-hosted **Vega** is the alternative. Either way the LD AI SDK resolves the agent
-  configs + graph and records metrics natively.
-- **Phase 2 — Automatic releases:** after deploy, **Beacon** receives deploy notifications,
-  discovers newly-added release flags, routes by scope, and triggers releases.
-- **Phase 3 — Cleanup:** out of scope (already exists in LaunchDarkly).
+Status: working prototype, shared with design partners. Phase 1 and Phase 2 both run
+end-to-end against a live demo repo. Not a product.
 
-See **[docs/plan.html](docs/plan.html)** for the design and **[docs/adr/](docs/adr/)** for the
-architectural decision records.
+## How it works
 
-## Status
+- **Phase 1 (CI, per pull request):** a GitHub Action resolves an agent graph and five agent
+  configs from LaunchDarkly and walks the chain: research and classify the PR, create a
+  feature flag (targeting off), wire the new behavior behind it, create guarded-release
+  metrics and instrument their events, write flag-on/flag-off tests, and produce a review
+  verdict. The agents commit to the PR branch. A release manifest
+  (`.release-flags/pr-N.json`) records the flag, metrics, and rollout parameters.
+- **Phase 2 (after deploy):** Beacon, a small HTTP service, receives deploy webhooks,
+  diffs `.release-flags/` between the deployed SHA and the previous one, and starts a
+  guarded release for each new manifest (turning the flag on atomically). It then monitors
+  the release to a terminal state: completed, reverted by a guardrail metric, or stopped.
+- **Phase 3 (flag cleanup):** out of scope; existing LaunchDarkly functionality.
 
-Actively-developed prototype — **not finished**. Phase 1 runs **end-to-end today** on the default
-Anthropic provider against a live demo repo: PR → agent chain → flag created → code wired → tests →
-review → approval decision. Implemented and tested: the shared LD client + release adapter, the
-provider seam (`AgentRunner`) with the Anthropic runner + sandbox tools + LD writer, the Vega
-client/transport, the config bridge (provision / sync / seed), the Phase 1 graph walker + GitHub
-Action, Beacon (discovery / scope routing / fullstack / release trigger), the Notifier, and
-bootstrap. `npm test`, `npm run typecheck`, and `npm run check:public` are green.
+Node-by-node detail with the exact mechanics: [docs/pipeline-overview.html](docs/pipeline-overview.html).
+Design history: [docs/adr/](docs/adr/).
 
-Still genuinely open: Vega entitlement (the hosted-agent path is preserved but blocked on a live
-dispatch endpoint); Phase 2 live-deploy validation; reading the approval mode from a per-repo LD
-flag (it's an env var / action input today).
-
-## Quickstart
-
-```bash
-npm install
-cp .env.example .env        # fill in LD_SDK_KEY, LD_API_KEY, LD_PROJECT_KEY, ANTHROPIC_API_KEY, …
-npm run build
-npm run bootstrap           # preflight checks + seed/provision agent configs into your LD project
-```
-
-Then drop `bootstrap/github-action-template/auto-factory.yml` into your app repo's
-`.github/workflows/`, set the repo secrets, and open a PR.
-
-Useful scripts: `npm run typecheck`, `npm test`, `npm run check:public` (public-leak guard).
-
-## Layout
+## Repository layout
 
 | Path | What it is |
 |------|------------|
-| `bootstrap/` | One-command setup that wires CI, the LD env, secrets shape, and a demo |
-| `packages/config-bridge/` | Provisions / syncs / seeds agent configs+graphs between LD projects |
-| `packages/phase1-resource-factory/` | GitHub Action: walks the agent graph through the selected provider |
-| `packages/beacon/` | Phase 2 release orchestrator |
-| `packages/shared/` | The prototype's core: `AgentRunner` seam, Anthropic runner + sandbox tools + LD writer, Vega client, native SDK bootstrap, types |
-| `config/agentcontrol/` | Agent configs/graph surface + the **CHANGELOG** (see Conventions below) |
-| `examples/demo-app/` | Monorepo demo: JS/TS frontend + Python backend |
-| `sources/` | Vendored, pinned external references (public) |
-| `reference-private/` | **gitignored** — proprietary source material we draw inspiration from |
+| `packages/phase1-resource-factory/` | The GitHub Action: graph walker, approval logic, PR comment |
+| `packages/shared/` | LD clients (REST + native SDK), the `AgentRunner` provider seam, the Anthropic runner and agent tools, release adapter |
+| `packages/beacon/` | Phase 2 release orchestrator (webhooks, discovery, trigger, monitor) |
+| `packages/config-bridge/` | CLI that provisions/syncs the agent configs and graph between LD projects |
+| `config/agentcontrol/ai-configs/` | The five agent definitions (instructions live here and in LD) |
+| `config/agentcontrol/graphs/` | The agent graph: chain order, routing conditions, per-agent write capabilities |
+| `bootstrap/` | One-command setup plus the drop-in workflow template |
+| `examples/demo-app/` | Local sandbox the agents run against in dry-run mode |
+| `docs/` | Pipeline overview, ADRs, design docs |
 
-**Conventions:** changes to the AI configs, the agent graph, or operational flags are logged in
-`config/agentcontrol/CHANGELOG.md`.
+## Phase 1 setup
 
-## Important: this repo is public
+### Prerequisites
 
-`reference-private/` and `sources/repos/` are gitignored. Proprietary material (the internal
-build, internal specs, real configs) lives only in `reference-private/` and must never be
-committed. See `docs/plan.html` §4 for the public/private boundary.
+- Node 20+
+- A LaunchDarkly account with **two projects**:
+  - a **factory** project, which holds the agent configs and graph (the pipeline reads from it)
+  - an **app** project, where the agents create flags and metrics (the pipeline writes to it)
+- A LaunchDarkly server SDK key for the factory project's environment, and an API access
+  token with write access to both projects
+- An Anthropic API key (the default agent execution backend)
+- A GitHub repository for your application
+
+### 1. Provision the agent configs and graph
+
+```bash
+git clone <this repo> && cd launchdarkly-auto-factory
+npm install
+cp .env.example .env    # fill in LD_SDK_KEY, LD_API_KEY, LD_PROJECT_KEY, LD_APP_PROJECT_KEY, ANTHROPIC_API_KEY
+npm run bootstrap
+```
+
+Bootstrap runs preflight checks, then creates the five agent AI configs and the
+`gha-auto-factory` agent graph in your factory project from the committed definitions in
+`config/agentcontrol/`. It is idempotent: existing configs are left alone. After
+provisioning, the agent instructions are editable in the LaunchDarkly UI; the pipeline reads
+them at run time, so instruction changes take effect on the next PR without redeploying
+anything.
+
+### 2. Add the workflow to your app repo
+
+Copy `bootstrap/github-action-template/auto-factory.yml` into your app repo at
+`.github/workflows/auto-factory.yml` and replace `<owner>` with the org or user hosting this
+repo. Then set, in the app repo:
+
+| Kind | Name | Value |
+|------|------|-------|
+| secret | `LD_SDK_KEY` | factory project server SDK key |
+| secret | `LD_API_KEY` | LD API token (writes flags/metrics in the app project) |
+| secret | `ANTHROPIC_API_KEY` | Anthropic API key |
+| variable | `LD_APP_PROJECT_KEY` | your app project key |
+
+`GITHUB_TOKEN` is provided by Actions automatically. The workflow needs
+`contents: write` and `pull-requests: write` (already set in the template).
+
+### 3. Open a pull request
+
+Write the change normally, with no flag. The chain runs on every PR
+(opened/synchronize/reopened) and takes a few minutes. On a flag-worthy PR you get:
+
+- a boolean flag in the app project, targeting **off** in all environments
+- commits on the PR branch: flag wiring, metric instrumentation plus the release manifest,
+  and flag-on/flag-off tests
+- three guarded-release metrics (error, latency, business) wired to the instrumented events
+- a summary comment on the PR and a check status
+
+The check is green when the code reviewer approves and red when it rejects. A red check is a
+review verdict, not a pipeline failure. PRs that do not need a flag (docs, dependency bumps,
+config changes) short-circuit after the first agent.
+
+### Behavior toggles
+
+| Input | Default | Effect |
+|-------|---------|--------|
+| `enable_flag_creation` | `false` in the action, `true` in the template | create real flags/metrics vs. read-only dry run |
+| `enable_code_changes` | `false` in the action, `true` in the template | allow agent commits to the PR branch |
+| `approval_mode` | `yolo` | `yolo` (report verdict), `middle` (gate high risk), `manual` (always gate) |
+| `graph_key` | `gha-auto-factory` | which agent graph to walk |
+
+The `auto-factory-ai-provider` flag (factory project, string variations `anthropic`/`vega`)
+selects the execution backend per run. It is optional: when the flag does not exist, the
+pipeline defaults to `anthropic`.
+
+## Phase 2 setup (Beacon)
+
+Phase 2 works end-to-end but is not yet a self-serve install; expect to read code. Summary
+of what a deployment involves (details in [packages/beacon/README.md](packages/beacon/README.md)):
+
+1. **Host Beacon** anywhere that runs a container:
+   `docker build -f packages/beacon/Dockerfile .` from the repo root. Required env:
+   `BEACON_WEBHOOK_SECRET`, `GITHUB_TOKEN` (reads `.release-flags/` via the contents API),
+   `LD_API_KEY`, `LD_PROJECT_KEY` (the app project), `LD_ENVIRONMENT_KEY`.
+2. **Register your services** in `config/services.yaml`: side (frontend/backend), repo,
+   and a status URL that returns the deployed SHA.
+3. **Point a deploy webhook at it.** Generic contract: POST `/flag-releases` with
+   `{service, sha, previousSha?, environment?}` and the shared secret. A Railway adapter
+   exists at `/webhooks/railway` (secret as a query parameter, since Railway webhooks cannot
+   set headers). Other CD systems need a similar small adapter or a curl step in the
+   pipeline.
+4. Beacon resolves `previousSha` from its own deploy-state store when the notification does
+   not carry one, diffs the manifests, triggers releases (method precedence: manifest
+   overrides, then the flag's release policy, then guarded-if-metrics), and monitors each
+   release to completion.
+
+Known limitations: agents do not yet write the `scope` field into manifests (everything
+defaults to frontend scope, so the fullstack coordination path is unexercised); the
+deploy-state store is a local JSON file (single instance, mount a volume to survive
+redeploys); boolean flags only.
+
+## Development
+
+```bash
+npm run build        # tsc project build
+npm test             # unit + integration tests
+npm run typecheck    # build + tests typecheck
+npm run check:public # guard against committing internal material
+```
+
+Changes to the agent configs, the graph, or operational flags are logged in
+`config/agentcontrol/CHANGELOG.md`. The committed config files are the canonical public
+copies; if you edit instructions in LaunchDarkly, re-export them here.
+
+## Note: this repo is public
+
+`reference-private/` and `sources/repos/` are gitignored. Internal material must never be
+committed; `npm run check:public` enforces the obvious cases.
