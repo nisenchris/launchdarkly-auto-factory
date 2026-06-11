@@ -44,8 +44,11 @@ export function parseRailwayWebhook(body: unknown): RailwayParseResult {
   if (!status) {
     return { kind: "unrecognized", reason: `no status field (top-level keys: ${Object.keys(obj).join(", ")})` };
   }
-  if (status.toUpperCase() !== "SUCCESS") {
-    return { kind: "ignored", reason: `deploy status ${status} (only SUCCESS triggers releases)` };
+  // The GraphQL API reports SUCCESS; the webhook event picker says Deployed /
+  // Redeployed — accept all three spellings of "this deploy is live".
+  const SUCCESS_STATUSES = new Set(["SUCCESS", "DEPLOYED", "REDEPLOYED"]);
+  if (!SUCCESS_STATUSES.has(status.toUpperCase())) {
+    return { kind: "ignored", reason: `deploy status ${status} (only a successful deploy triggers releases)` };
   }
 
   const service = firstString(obj, ["service.name", "deployment.meta.serviceName", "serviceName"]);

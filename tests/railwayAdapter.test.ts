@@ -27,9 +27,22 @@ describe("parseRailwayWebhook", () => {
     assert.deepEqual(result, { kind: "deploy_success", service: "demo-frontend", sha: "def456" });
   });
 
-  it("ignores non-SUCCESS deploy events", () => {
-    const result = parseRailwayWebhook({ status: "BUILDING", service: { name: "demo-backend" } });
-    assert.equal(result.kind, "ignored");
+  it("accepts DEPLOYED/REDEPLOYED as success statuses (webhook event spellings)", () => {
+    for (const status of ["DEPLOYED", "Redeployed"]) {
+      const result = parseRailwayWebhook({
+        status,
+        service: { name: "demo-backend" },
+        deployment: { meta: { commitHash: "abc" } },
+      });
+      assert.equal(result.kind, "deploy_success", `status ${status}`);
+    }
+  });
+
+  it("ignores non-success deploy events", () => {
+    for (const status of ["BUILDING", "FAILED", "CRASHED", "REMOVED", "QUEUED"]) {
+      const result = parseRailwayWebhook({ status, service: { name: "demo-backend" } });
+      assert.equal(result.kind, "ignored", `status ${status}`);
+    }
   });
 
   it("reports unrecognized payloads without throwing", () => {
