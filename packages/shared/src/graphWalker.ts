@@ -18,13 +18,8 @@
  * recorded back to LaunchDarkly via the AI-config and graph trackers.
  */
 
-import type {
-  AgentGraphDefinition,
-  AgentGraphNode,
-  AgentNodeResult,
-  AgentRunner,
-  LDGraphTracker,
-} from "@auto-factory/shared";
+import type { AgentGraphDefinition, AgentGraphNode, LDGraphTracker } from "@launchdarkly/server-sdk-ai";
+import type { AgentNodeResult, AgentRunner } from "./agentRunner.js";
 
 export interface NodeRun {
   configKey: string;

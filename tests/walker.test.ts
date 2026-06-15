@@ -13,7 +13,7 @@ import type {
   AgentNodeResult,
   AgentRunner,
 } from "@auto-factory/shared";
-import { walkGraph } from "@auto-factory/phase1-resource-factory";
+import { walkGraph } from "@auto-factory/shared";
 
 /**
  * Fake runner: returns a scripted `{status, tags}` per config key (no network,

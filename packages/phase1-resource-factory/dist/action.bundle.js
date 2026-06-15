@@ -33176,6 +33176,149 @@ var LdApiError = class extends Error {
   }
 };
 
+// ../shared/dist/graphWalker.js
+function tagsMatch(tags, cond) {
+  return Object.entries(cond).every(([k, v]) => tags[k] === v);
+}
+function handoffTags(handoff, field) {
+  const v = handoff?.[field];
+  return v && typeof v === "object" ? v : void 0;
+}
+function handoffNumber(handoff, field) {
+  const v = handoff?.[field];
+  return typeof v === "number" ? v : void 0;
+}
+function handoffString(handoff, field) {
+  const v = handoff?.[field];
+  return typeof v === "string" ? v : void 0;
+}
+function handoffStringArray(handoff, field) {
+  const v = handoff?.[field];
+  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : void 0;
+}
+function buildPrompt(hasInbound, ctx) {
+  const header = [
+    ctx.REPO ? `Repository: ${ctx.REPO}` : "",
+    ctx.PR_NUMBER ? `Pull request: #${ctx.PR_NUMBER}` : "",
+    ctx.PR_TITLE ? `Title: ${ctx.PR_TITLE}` : ""
+  ].filter(Boolean).join("\n");
+  if (!hasInbound) {
+    return `${header}${ctx.PR_BODY ? `
+
+${ctx.PR_BODY}` : ""}`.trim();
+  }
+  const brief = typeof ctx.PREVIOUS_STEP_OUTPUT === "string" ? ctx.PREVIOUS_STEP_OUTPUT : "";
+  return `${header}
+
+${brief}`.trim();
+}
+function lastAssistantText(result) {
+  const finals = result.messages.filter((m) => m.role === "assistant");
+  const fin = finals.find((m) => m.isFinal) ?? finals[finals.length - 1];
+  return fin?.content ?? "";
+}
+function allNodeKeys(graphDef) {
+  const raw = graphDef.getConfig();
+  const keys = /* @__PURE__ */ new Set();
+  if (raw.root)
+    keys.add(raw.root);
+  for (const [source, edges] of Object.entries(raw.edges ?? {})) {
+    keys.add(source);
+    for (const e of edges)
+      keys.add(e.key);
+  }
+  return [...keys];
+}
+async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
+  const runs = [];
+  const accumulatedTags = {};
+  const ctx = { ...context };
+  const visited = /* @__PURE__ */ new Set();
+  let node = graphDef.rootNode();
+  let inboundHandoff;
+  while (node && !visited.has(node.getKey())) {
+    const key = node.getKey();
+    visited.add(key);
+    const cfg = node.getConfig();
+    const maxTurns = handoffNumber(inboundHandoff, "max_turns");
+    const requestType = handoffString(inboundHandoff, "request_type");
+    const capabilities = handoffStringArray(inboundHandoff, "capabilities");
+    onEvent?.({ type: "node-start", configKey: key, index: runs.length });
+    const result = await runner.runNode({
+      configKey: key,
+      prompt: buildPrompt(inboundHandoff !== void 0, ctx),
+      ...cfg.instructions ? { instructions: cfg.instructions } : {},
+      ...cfg.model?.name ? { model: cfg.model.name } : {},
+      tracker: cfg.createTracker(),
+      ...maxTurns !== void 0 ? { maxTurns } : {},
+      ...requestType ? { requestType } : {},
+      ...capabilities ? { capabilities } : {}
+    });
+    Object.assign(accumulatedTags, result.tags);
+    const output = lastAssistantText(result);
+    ctx.PREVIOUS_STEP_OUTPUT = output;
+    const run = { configKey: key, status: result.status, output, tags: result.tags };
+    runs.push(run);
+    onEvent?.({ type: "node-complete", configKey: key, index: runs.length - 1, run });
+    let next = null;
+    let nextHandoff;
+    for (const edge of node.getEdges()) {
+      const h = edge.handoff;
+      const require2 = handoffTags(h, "require_tags");
+      if (require2 && !tagsMatch(accumulatedTags, require2))
+        continue;
+      const skip = handoffTags(h, "skip_if_tags");
+      if (skip && tagsMatch(accumulatedTags, skip))
+        continue;
+      next = edge.key;
+      nextHandoff = h;
+      break;
+    }
+    if (next)
+      graphTracker?.trackHandoffSuccess(key, next);
+    node = next ? graphDef.getNode(next) : null;
+    inboundHandoff = nextHandoff;
+  }
+  const reached = new Set(runs.map((r) => r.configKey));
+  const skipped = allNodeKeys(graphDef).filter((k) => !reached.has(k));
+  return { runs, tags: accumulatedTags, skipped };
+}
+
+// ../shared/dist/approval.js
+function getApprovalMode() {
+  const m = (process.env.APPROVAL_MODE || "yolo").toLowerCase();
+  return m === "manual" || m === "middle" ? m : "yolo";
+}
+function decideApproval(mode, reviewApproved, risk) {
+  if (!reviewApproved) {
+    return { apply: false, requiresHuman: false, reason: "code review REJECTED" };
+  }
+  switch (mode) {
+    case "yolo":
+      return { apply: true, requiresHuman: false, reason: "yolo: auto-apply on approval" };
+    case "manual":
+      return { apply: false, requiresHuman: true, reason: "manual: awaiting human approval" };
+    case "middle":
+      if (risk === "high") {
+        return { apply: false, requiresHuman: true, reason: "middle: high risk \u2192 human approval" };
+      }
+      return { apply: true, requiresHuman: false, reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply` };
+  }
+}
+function interpretWalk(tags) {
+  const decision = (tags.review_approved ?? // canonical
+  tags.review_decision ?? // legacy
+  tags.decision ?? // legacy
+  tags.approved ?? // legacy
+  "").toLowerCase();
+  const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
+  const rawRisk = (tags.risk_level ?? // canonical
+  tags.risk ?? // legacy
+  "").toLowerCase();
+  const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
+  return { reviewApproved, risk };
+}
+
 // ../shared/dist/vegaClient.js
 var TERMINAL = /* @__PURE__ */ new Set(["completed", "failed", "stopped", "cancelled"]);
 var StubVegaTransport = class {
@@ -35558,13 +35701,15 @@ var SandboxToolExecutor = class {
   allowEdits;
   prBranch;
   prBaseRef;
+  gitMode;
   tags = {};
-  constructor(root, writer, allowEdits = false, prBranch, prBaseRef) {
+  constructor(root, writer, allowEdits = false, prBranch, prBaseRef, gitMode = "push") {
     this.root = root;
     this.writer = writer;
     this.allowEdits = allowEdits;
     this.prBranch = prBranch;
     this.prBaseRef = prBaseRef;
+    this.gitMode = gitMode;
   }
   /** Resolve a repo-relative path and reject anything escaping the sandbox root. */
   safeResolve(rel) {
@@ -35816,6 +35961,20 @@ ${t.out}`), isError: t.code !== 0 };
   commitAndPush(message) {
     if (!this.allowEdits)
       return { content: "commit_and_push is not available", isError: true };
+    if (this.gitMode === "workingTree") {
+      try {
+        const changed = this.runGit(["status", "--porcelain"]).trim();
+        if (!changed)
+          return { content: "No file changes were made." };
+        const n = changed.split("\n").filter(Boolean).length;
+        return {
+          content: `Left ${n} changed file(s) in the working tree for review (not committed). Review and commit them in your editor. Intended commit message: "${message}"`
+        };
+      } catch (e) {
+        const err = e;
+        return { content: `could not read working-tree status: ${(err.stderr?.toString() || err.message || String(e)).slice(0, 300)}`, isError: true };
+      }
+    }
     try {
       this.runGit(["config", "user.email", "autofactory@launchdarkly.com"]);
       this.runGit(["config", "user.name", "LaunchDarkly AutoFactory"]);
@@ -35987,7 +36146,7 @@ var AnthropicAgentRunner = class {
     const writer = caps.createFlag || caps.createMetric ? this.opts.writer : void 0;
     const system = (req.instructions ?? "") + modeNote(caps);
     const model = anthropicModelId(req.model);
-    const executor = new SandboxToolExecutor(this.opts.sandboxRoot, writer, caps.editFiles, this.opts.prBranch, this.opts.prBaseRef);
+    const executor = new SandboxToolExecutor(this.opts.sandboxRoot, writer, caps.editFiles, this.opts.prBranch, this.opts.prBaseRef, this.opts.gitMode ?? "push");
     const tools = buildSandboxTools(caps);
     const maxTurns = req.maxTurns ?? DEFAULT_MAX_TURNS;
     const messages = [{ role: "user", content: req.prompt }];
@@ -36054,41 +36213,6 @@ function anthropicModelId(name) {
   return id.trim() || DEFAULT_MODEL;
 }
 
-// src/approval.ts
-function getApprovalMode() {
-  const m = (process.env.APPROVAL_MODE || "yolo").toLowerCase();
-  return m === "manual" || m === "middle" ? m : "yolo";
-}
-function decideApproval(mode, reviewApproved, risk) {
-  if (!reviewApproved) {
-    return { apply: false, requiresHuman: false, reason: "code review REJECTED" };
-  }
-  switch (mode) {
-    case "yolo":
-      return { apply: true, requiresHuman: false, reason: "yolo: auto-apply on approval" };
-    case "manual":
-      return { apply: false, requiresHuman: true, reason: "manual: awaiting human approval" };
-    case "middle":
-      if (risk === "high") {
-        return { apply: false, requiresHuman: true, reason: "middle: high risk \u2192 human approval" };
-      }
-      return { apply: true, requiresHuman: false, reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply` };
-  }
-}
-function interpretWalk(tags) {
-  const decision = (tags.review_approved ?? // canonical
-  tags.review_decision ?? // legacy
-  tags.decision ?? // legacy
-  tags.approved ?? // legacy
-  "").toLowerCase();
-  const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
-  const rawRisk = (tags.risk_level ?? // canonical
-  tags.risk ?? // legacy
-  "").toLowerCase();
-  const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
-  return { reviewApproved, risk };
-}
-
 // src/comment.ts
 var MARKER = "<!-- auto-factory-phase1 -->";
 async function postPrComment(body, target = {}) {
@@ -36136,106 +36260,6 @@ async function findExistingComment(repo, prNumber, headers) {
   } catch {
     return void 0;
   }
-}
-
-// src/graphWalker.ts
-function tagsMatch(tags, cond) {
-  return Object.entries(cond).every(([k, v]) => tags[k] === v);
-}
-function handoffTags(handoff, field) {
-  const v = handoff?.[field];
-  return v && typeof v === "object" ? v : void 0;
-}
-function handoffNumber(handoff, field) {
-  const v = handoff?.[field];
-  return typeof v === "number" ? v : void 0;
-}
-function handoffString(handoff, field) {
-  const v = handoff?.[field];
-  return typeof v === "string" ? v : void 0;
-}
-function handoffStringArray(handoff, field) {
-  const v = handoff?.[field];
-  return Array.isArray(v) ? v.filter((x) => typeof x === "string") : void 0;
-}
-function buildPrompt(hasInbound, ctx) {
-  const header = [
-    ctx.REPO ? `Repository: ${ctx.REPO}` : "",
-    ctx.PR_NUMBER ? `Pull request: #${ctx.PR_NUMBER}` : "",
-    ctx.PR_TITLE ? `Title: ${ctx.PR_TITLE}` : ""
-  ].filter(Boolean).join("\n");
-  if (!hasInbound) {
-    return `${header}${ctx.PR_BODY ? `
-
-${ctx.PR_BODY}` : ""}`.trim();
-  }
-  const brief = typeof ctx.PREVIOUS_STEP_OUTPUT === "string" ? ctx.PREVIOUS_STEP_OUTPUT : "";
-  return `${header}
-
-${brief}`.trim();
-}
-function lastAssistantText(result) {
-  const finals = result.messages.filter((m) => m.role === "assistant");
-  const fin = finals.find((m) => m.isFinal) ?? finals[finals.length - 1];
-  return fin?.content ?? "";
-}
-function allNodeKeys(graphDef) {
-  const raw = graphDef.getConfig();
-  const keys = /* @__PURE__ */ new Set();
-  if (raw.root) keys.add(raw.root);
-  for (const [source, edges] of Object.entries(raw.edges ?? {})) {
-    keys.add(source);
-    for (const e of edges) keys.add(e.key);
-  }
-  return [...keys];
-}
-async function walkGraph(graphDef, runner, context, graphTracker) {
-  const runs = [];
-  const accumulatedTags = {};
-  const ctx = { ...context };
-  const visited = /* @__PURE__ */ new Set();
-  let node = graphDef.rootNode();
-  let inboundHandoff;
-  while (node && !visited.has(node.getKey())) {
-    const key = node.getKey();
-    visited.add(key);
-    const cfg = node.getConfig();
-    const maxTurns = handoffNumber(inboundHandoff, "max_turns");
-    const requestType = handoffString(inboundHandoff, "request_type");
-    const capabilities = handoffStringArray(inboundHandoff, "capabilities");
-    const result = await runner.runNode({
-      configKey: key,
-      prompt: buildPrompt(inboundHandoff !== void 0, ctx),
-      ...cfg.instructions ? { instructions: cfg.instructions } : {},
-      ...cfg.model?.name ? { model: cfg.model.name } : {},
-      tracker: cfg.createTracker(),
-      ...maxTurns !== void 0 ? { maxTurns } : {},
-      ...requestType ? { requestType } : {},
-      ...capabilities ? { capabilities } : {}
-    });
-    Object.assign(accumulatedTags, result.tags);
-    const output = lastAssistantText(result);
-    ctx.PREVIOUS_STEP_OUTPUT = output;
-    runs.push({ configKey: key, status: result.status, output, tags: result.tags });
-    let next = null;
-    let nextHandoff;
-    for (const edge of node.getEdges()) {
-      const h = edge.handoff;
-      const require2 = handoffTags(h, "require_tags");
-      if (require2 && !tagsMatch(accumulatedTags, require2)) continue;
-      const skip = handoffTags(h, "skip_if_tags");
-      if (skip && tagsMatch(accumulatedTags, skip)) continue;
-      next = edge.key;
-      nextHandoff = h;
-      break;
-    }
-    if (next) graphTracker?.trackHandoffSuccess(key, next);
-    node = next ? graphDef.getNode(next) : null;
-    inboundHandoff = nextHandoff;
-  }
-  const reached = new Set(runs.map((r) => r.configKey));
-  const skipped = allNodeKeys(graphDef).filter((k) => !reached.has(k));
-  return { runs, tags: accumulatedTags, skipped };
 }
 
 // src/prContext.ts

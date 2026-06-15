@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import type { ApprovalMode, RiskLevel } from "@auto-factory/shared";
-import { decideApproval, getApprovalMode, interpretWalk } from "@auto-factory/phase1-resource-factory";
+import { decideApproval, getApprovalMode, interpretWalk } from "@auto-factory/shared";
 
 describe("decideApproval", () => {
   const modes: ApprovalMode[] = ["yolo", "middle", "manual"];

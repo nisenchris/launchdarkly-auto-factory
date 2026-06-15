@@ -9,7 +9,7 @@
  * adjust if the agent configs change.
  */
 
-import type { ApprovalMode, RiskLevel } from "@auto-factory/shared";
+import type { ApprovalMode, RiskLevel } from "./types.js";
 
 export interface ApprovalDecision {
   apply: boolean;

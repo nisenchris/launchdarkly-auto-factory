@@ -20,13 +20,15 @@ import {
   type VegaTransport,
   appConnection,
   closeLdSdk,
+  decideApproval,
+  getApprovalMode,
   getLdSdk,
+  interpretWalk,
   pipelineContext,
   resolveAiProvider,
+  walkGraph,
 } from "@auto-factory/shared";
-import { decideApproval, getApprovalMode, interpretWalk } from "./approval.js";
 import { postPrComment } from "./comment.js";
-import { walkGraph } from "./graphWalker.js";
 import { type PrContext, assemblePrContext } from "./prContext.js";
 
 /**
