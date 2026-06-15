@@ -26,7 +26,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   panel = new AutoFactoryViewProvider(() => void runOnce(context, "button"));
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(AutoFactoryViewProvider.viewId, panel),
+    vscode.window.registerWebviewViewProvider(AutoFactoryViewProvider.viewId, panel, {
+      // Keep the webview's DOM alive when the view is hidden, so switching the
+      // sidebar away and back doesn't blank the in-progress chain.
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
   );
 
   statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);

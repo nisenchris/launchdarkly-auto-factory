@@ -13,6 +13,10 @@ type NodeStatus = "pending" | "running" | "done" | "failed" | "skipped";
 export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = "launchdarkly-autofactory.panel";
   private view?: vscode.WebviewView;
+  // Buffer of state messages since the last run start, replayed when the
+  // webview is (re)created — switching the sidebar away tears the webview down,
+  // so without this the chain's progress/verdict would reset to blank.
+  private buffer: Array<Record<string, unknown>> = [];
 
   constructor(private readonly onRun: () => void) {}
 
@@ -22,12 +26,26 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
     view.webview.html = this.html(view.webview);
     view.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === "run") this.onRun();
+      // The webview announces readiness on load; replay whatever state we have
+      // so a recreated view restores instead of showing a blank chain.
+      else if (msg?.type === "ready") this.replay();
     });
-    this.post({ type: "reset" });
   }
 
   private post(message: unknown): void {
     void this.view?.webview.postMessage(message);
+  }
+
+  /** Post + remember, so the message survives a webview teardown/recreate. */
+  private send(message: Record<string, unknown>): void {
+    if (message.type === "start" || message.type === "reset") this.buffer = [];
+    this.buffer.push(message);
+    this.post(message);
+  }
+
+  private replay(): void {
+    if (this.buffer.length === 0) this.post({ type: "reset" });
+    else for (const m of this.buffer) this.post(m);
   }
 
   /** Reveal the view (used when a run starts from elsewhere). */
@@ -38,27 +56,27 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
   // --- driven by the extension's reporter ---
 
   start(subtitle: string): void {
-    this.post({ type: "start", subtitle });
+    this.send({ type: "start", subtitle });
   }
   status(text: string): void {
-    this.post({ type: "status", text });
+    this.send({ type: "status", text });
   }
   nodeStart(configKey: string): void {
-    this.post({ type: "node", configKey, status: "running" as NodeStatus });
+    this.send({ type: "node", configKey, status: "running" as NodeStatus });
   }
   nodeComplete(run: NodeRun): void {
     const status: NodeStatus = run.status === "failed" ? "failed" : "done";
-    this.post({ type: "node", configKey: run.configKey, status, tags: run.tags });
+    this.send({ type: "node", configKey: run.configKey, status, tags: run.tags });
   }
   done(result: RunResult): void {
     const ran = new Set(result.runs.map((r) => r.configKey));
     for (const n of NODE_SEQUENCE) {
-      if (!ran.has(n.key)) this.post({ type: "node", configKey: n.key, status: "skipped" as NodeStatus });
+      if (!ran.has(n.key)) this.send({ type: "node", configKey: n.key, status: "skipped" as NodeStatus });
     }
     const verdict = result.tags.review_approved
       ? `${result.tags.review_approved} (risk: ${result.tags.risk_level ?? "?"})`
       : "no verdict";
-    this.post({
+    this.send({
       type: "done",
       verdict,
       reason: result.decision.reason,
@@ -69,7 +87,7 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
     });
   }
   failed(message: string): void {
-    this.post({ type: "failed", message });
+    this.send({ type: "failed", message });
   }
 
   private html(webview: vscode.Webview): string {
@@ -165,6 +183,9 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
       s.innerHTML = '<div class="verdict">✗ Run failed</div><div>' + m.message + '</div>';
     }
   });
+  // Tell the extension we're listening so it can replay state into a freshly
+  // (re)created view — restores the chain after switching the sidebar away.
+  vscode.postMessage({ type: "ready" });
 </script></body></html>`;
   }
 }
