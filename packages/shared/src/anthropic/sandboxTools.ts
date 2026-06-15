@@ -198,6 +198,15 @@ export interface ToolExecResult {
 }
 
 /**
+ * How `commit_and_push` finalizes the agents' edits:
+ *  - "push" (default, GitHub Action): commit the changes and push to the PR branch.
+ *  - "workingTree" (Cursor extension): leave the edits in the working tree,
+ *    uncommitted, for the developer to review in the editor's SCM and commit
+ *    themselves. No git writes.
+ */
+export type GitMode = "push" | "workingTree";
+
+/**
  * Executes tool calls against a fixed root directory, accumulating routing tags.
  * One instance per node run. `writer` enables `create_flag` / `create_metric`;
  * `allowEdits` enables the file-mutation + git tools.
@@ -213,6 +222,8 @@ export class SandboxToolExecutor {
     private readonly prBranch?: string,
     /** PR base ref for the git_diff base...HEAD. Falls back to PR_BASE_REF env. */
     private readonly prBaseRef?: string,
+    /** Whether commit_and_push commits+pushes or leaves edits in the working tree. */
+    private readonly gitMode: GitMode = "push",
   ) {}
 
   /** Resolve a repo-relative path and reject anything escaping the sandbox root. */
@@ -466,6 +477,22 @@ export class SandboxToolExecutor {
 
   private commitAndPush(message: string): ToolExecResult {
     if (!this.allowEdits) return { content: "commit_and_push is not available", isError: true };
+    // Cursor/extension mode: don't commit or push. The edits the agents made are
+    // already in the working tree; the developer reviews them in the editor's
+    // SCM and commits. Report what changed so the chain (and its tags) complete.
+    if (this.gitMode === "workingTree") {
+      try {
+        const changed = this.runGit(["status", "--porcelain"]).trim();
+        if (!changed) return { content: "No file changes were made." };
+        const n = changed.split("\n").filter(Boolean).length;
+        return {
+          content: `Left ${n} changed file(s) in the working tree for review (not committed). Review and commit them in your editor. Intended commit message: "${message}"`,
+        };
+      } catch (e) {
+        const err = e as { stderr?: Buffer | string; message?: string };
+        return { content: `could not read working-tree status: ${(err.stderr?.toString() || err.message || String(e)).slice(0, 300)}`, isError: true };
+      }
+    }
     try {
       this.runGit(["config", "user.email", "autofactory@launchdarkly.com"]);
       this.runGit(["config", "user.name", "LaunchDarkly AutoFactory"]);

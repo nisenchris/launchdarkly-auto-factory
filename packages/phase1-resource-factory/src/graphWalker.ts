@@ -41,6 +41,15 @@ export interface WalkResult {
   skipped: string[];
 }
 
+/**
+ * Progress events emitted as the walk advances, for live UIs (e.g. the Cursor
+ * extension streaming research → flag → metrics → test → review). Optional and
+ * additive: callers that don't pass `onEvent` (the GitHub Action) are unaffected.
+ */
+export type WalkEvent =
+  | { type: "node-start"; configKey: string; index: number }
+  | { type: "node-complete"; configKey: string; index: number; run: NodeRun };
+
 /** All key/value pairs in `cond` are present and equal in `tags`. */
 function tagsMatch(tags: Record<string, string>, cond: Record<string, string>): boolean {
   return Object.entries(cond).every(([k, v]) => tags[k] === v);
@@ -107,6 +116,7 @@ export async function walkGraph(
   runner: AgentRunner,
   context: Record<string, unknown>,
   graphTracker?: LDGraphTracker,
+  onEvent?: (event: WalkEvent) => void,
 ): Promise<WalkResult> {
   const runs: NodeRun[] = [];
   const accumulatedTags: Record<string, string> = {};
@@ -125,6 +135,7 @@ export async function walkGraph(
     const maxTurns = handoffNumber(inboundHandoff, "max_turns");
     const requestType = handoffString(inboundHandoff, "request_type");
     const capabilities = handoffStringArray(inboundHandoff, "capabilities");
+    onEvent?.({ type: "node-start", configKey: key, index: runs.length });
     const result = await runner.runNode({
       configKey: key,
       prompt: buildPrompt(inboundHandoff !== undefined, ctx),
@@ -139,7 +150,9 @@ export async function walkGraph(
     Object.assign(accumulatedTags, result.tags);
     const output = lastAssistantText(result);
     ctx.PREVIOUS_STEP_OUTPUT = output;
-    runs.push({ configKey: key, status: result.status, output, tags: result.tags });
+    const run: NodeRun = { configKey: key, status: result.status, output, tags: result.tags };
+    runs.push(run);
+    onEvent?.({ type: "node-complete", configKey: key, index: runs.length - 1, run });
 
     // Pick the next edge whose handoff conditions pass.
     let next: string | null = null;

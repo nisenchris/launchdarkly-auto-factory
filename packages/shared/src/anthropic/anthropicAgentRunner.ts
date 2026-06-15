@@ -21,7 +21,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { AgentNodeRequest, AgentNodeResult, AgentRunner, AgentStatus } from "../agentRunner.js";
 import type { LdResourceWriter } from "./ldWriter.js";
-import { SandboxToolExecutor, type ToolCapabilities, buildSandboxTools } from "./sandboxTools.js";
+import { type GitMode, SandboxToolExecutor, type ToolCapabilities, buildSandboxTools } from "./sandboxTools.js";
 
 const TAGGING_NOTE = `
 
@@ -118,6 +118,11 @@ export interface AnthropicAgentRunnerOptions {
   prBranch?: string;
   /** PR base ref the git_diff tool diffs against (passed to the sandbox executor). */
   prBaseRef?: string;
+  /**
+   * How `commit_and_push` finalizes edits: "push" (default, GitHub Action) or
+   * "workingTree" (Cursor extension — leave edits uncommitted for review).
+   */
+  gitMode?: GitMode;
 }
 
 export class AnthropicAgentRunner implements AgentRunner {
@@ -150,6 +155,7 @@ export class AnthropicAgentRunner implements AgentRunner {
       caps.editFiles,
       this.opts.prBranch,
       this.opts.prBaseRef,
+      this.opts.gitMode ?? "push",
     );
     const tools = buildSandboxTools(caps) as Anthropic.Tool[];
     const maxTurns = req.maxTurns ?? DEFAULT_MAX_TURNS;

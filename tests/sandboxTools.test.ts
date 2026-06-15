@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -167,6 +168,44 @@ describe("SandboxToolExecutor — create_flag fallback tagging", () => {
     assert.equal(r.isError, undefined);
     assert.equal(exec.tags.flag_created, "true");
     assert.equal(exec.tags.flag_key, "enable-thing");
+  });
+});
+
+describe("SandboxToolExecutor — commit_and_push gitMode", () => {
+  const git = (args: string[]) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+
+  function initRepo(): void {
+    git(["init", "-q"]);
+    git(["config", "user.email", "t@example.com"]);
+    git(["config", "user.name", "Test"]);
+    git(["add", "-A"]);
+    git(["commit", "-q", "-m", "initial"]);
+  }
+
+  it("workingTree mode reports changed files without committing them", async () => {
+    initRepo();
+    const exec = new SandboxToolExecutor(root, undefined, true, undefined, undefined, "workingTree");
+    // An agent edit lands in the working tree.
+    await exec.execute("write_file", { path: "feature.txt", content: "new behavior\n" });
+
+    const before = git(["rev-parse", "HEAD"]).trim();
+    const r = await exec.execute("commit_and_push", { message: "feat: wire flag" });
+    const after = git(["rev-parse", "HEAD"]).trim();
+
+    assert.equal(r.isError, undefined);
+    assert.match(r.content, /working tree for review/);
+    assert.equal(before, after, "HEAD must not move in workingTree mode");
+    // The change is still present, uncommitted.
+    assert.match(git(["status", "--porcelain"]), /feature\.txt/);
+  });
+
+  it("workingTree mode reports cleanly when nothing changed", async () => {
+    initRepo();
+    const exec = new SandboxToolExecutor(root, undefined, true, undefined, undefined, "workingTree");
+    const r = await exec.execute("commit_and_push", { message: "noop" });
+    assert.equal(r.isError, undefined);
+    assert.match(r.content, /No file changes/);
   });
 });
 
