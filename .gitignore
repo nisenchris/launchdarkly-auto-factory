@@ -55,3 +55,6 @@ beacon-state.json
 
 # Phase 1 Cursor extension working notes (local-only)
 docs/phase1-cursor-unknowns.md
+
+# Packaged extension artifacts
+*.vsix

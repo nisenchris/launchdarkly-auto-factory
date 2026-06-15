@@ -1,0 +1,11 @@
+# Ship only the bundled extension + docs. Everything else is build-time.
+src/**
+dist/**/*.js
+dist/**/*.d.ts
+dist/**/*.map
+!dist/extension.bundle.cjs
+tsconfig.json
+tsconfig.tsbuildinfo
+.vscode/**
+**/*.ts
+node_modules/**

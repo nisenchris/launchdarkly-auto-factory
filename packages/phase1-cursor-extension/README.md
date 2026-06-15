@@ -70,7 +70,7 @@ root:
 ```bash
 npm install
 npm run build
-npm run bundle -w @auto-factory/phase1-cursor-extension   # produces dist/extension.bundle.cjs
+npm run bundle -w launchdarkly-autofactory   # produces dist/extension.bundle.cjs
 ```
 
 Then either:

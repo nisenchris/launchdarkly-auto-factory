@@ -1,5 +1,5 @@
 {
-  "name": "@auto-factory/phase1-cursor-extension",
+  "name": "launchdarkly-autofactory",
   "displayName": "LaunchDarkly AutoFactory",
   "description": "Phase 1 of LaunchDarkly AutoFactory, in the editor: research a change, create a feature flag, instrument guarded-release metrics, and write flag-path tests.",
   "version": "0.0.1",
@@ -7,6 +7,11 @@
   "private": true,
   "type": "module",
   "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/launchdarkly-labs/launchdarkly-auto-factory.git",
+    "directory": "packages/phase1-cursor-extension"
+  },
   "engines": {
     "vscode": "^1.85.0",
     "node": ">=20"
@@ -16,7 +21,8 @@
   "main": "./dist/extension.bundle.cjs",
   "scripts": {
     "build": "tsc -b",
-    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.bundle.cjs"
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --external:vscode --outfile=dist/extension.bundle.cjs",
+    "vscode:prepublish": "npm run build && npm run bundle"
   },
   "contributes": {
     "commands": [
