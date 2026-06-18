@@ -14,6 +14,12 @@ import type { ApprovalMode, RiskLevel } from "./types.js";
 export interface ApprovalDecision {
   apply: boolean;
   requiresHuman: boolean;
+  /**
+   * True when the pipeline intentionally created no flag (e.g. an infra/docs PR
+   * that hit Rule F11). There is nothing to review or apply, so this is a
+   * successful no-op — NOT a rejection. The PR check should pass.
+   */
+  noop: boolean;
   reason: string;
 }
 
@@ -32,20 +38,37 @@ export function decideApproval(
   mode: ApprovalMode,
   reviewApproved: boolean,
   risk?: RiskLevel,
+  skipFlagging = false,
 ): ApprovalDecision {
+  // An intentional skip (no flag needed — e.g. infra/docs PR) short-circuits the
+  // chain before the code reviewer runs, so `review_approved` is never set. That
+  // is a successful no-op, not a rejection: pass the check with nothing to apply.
+  if (skipFlagging) {
+    return {
+      apply: false,
+      requiresHuman: false,
+      noop: true,
+      reason: "no flag needed — nothing to review",
+    };
+  }
   if (!reviewApproved) {
-    return { apply: false, requiresHuman: false, reason: "code review REJECTED" };
+    return { apply: false, requiresHuman: false, noop: false, reason: "code review REJECTED" };
   }
   switch (mode) {
     case "yolo":
-      return { apply: true, requiresHuman: false, reason: "yolo: auto-apply on approval" };
+      return { apply: true, requiresHuman: false, noop: false, reason: "yolo: auto-apply on approval" };
     case "manual":
-      return { apply: false, requiresHuman: true, reason: "manual: awaiting human approval" };
+      return { apply: false, requiresHuman: true, noop: false, reason: "manual: awaiting human approval" };
     case "middle":
       if (risk === "high") {
-        return { apply: false, requiresHuman: true, reason: "middle: high risk → human approval" };
+        return { apply: false, requiresHuman: true, noop: false, reason: "middle: high risk → human approval" };
       }
-      return { apply: true, requiresHuman: false, reason: `middle: ${risk ?? "unknown"} risk → auto-apply` };
+      return {
+        apply: true,
+        requiresHuman: false,
+        noop: false,
+        reason: `middle: ${risk ?? "unknown"} risk → auto-apply`,
+      };
   }
 }
 
@@ -58,6 +81,7 @@ export function decideApproval(
 export function interpretWalk(tags: Record<string, string>): {
   reviewApproved: boolean;
   risk?: RiskLevel;
+  skipFlagging: boolean;
 } {
   const decision = (
     tags.review_approved ?? // canonical
@@ -74,5 +98,8 @@ export function interpretWalk(tags: Record<string, string>): {
   ).toLowerCase();
   const risk: RiskLevel | undefined =
     rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : undefined;
-  return { reviewApproved, risk };
+  // The research-planner / flag-implementer set skip_flagging=true when a PR
+  // legitimately needs no feature flag (Rule F11: infra, docs, chore, etc.).
+  const skipFlagging = (tags.skip_flagging ?? "").toLowerCase() === "true";
+  return { reviewApproved, risk, skipFlagging };
 }

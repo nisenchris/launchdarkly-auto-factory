@@ -14,7 +14,21 @@ describe("decideApproval", () => {
         const d = decideApproval(mode, false, risk);
         assert.equal(d.apply, false, `${mode}/${risk}`);
         assert.equal(d.requiresHuman, false, `${mode}/${risk}`);
+        assert.equal(d.noop, false, `${mode}/${risk}`);
         assert.match(d.reason, /reject/i);
+      }
+    }
+  });
+
+  it("treats skipFlagging as a successful no-op (not a rejection), in any mode", () => {
+    for (const mode of modes) {
+      for (const risk of risks) {
+        // Even with review unapproved, an intentional skip is a clean pass.
+        const d = decideApproval(mode, false, risk, true);
+        assert.equal(d.apply, false, `${mode}/${risk}`);
+        assert.equal(d.requiresHuman, false, `${mode}/${risk}`);
+        assert.equal(d.noop, true, `${mode}/${risk}`);
+        assert.doesNotMatch(d.reason, /reject/i, `${mode}/${risk}`);
       }
     }
   });
@@ -76,6 +90,13 @@ describe("interpretWalk", () => {
   it("returns undefined risk for unknown/absent values", () => {
     assert.equal(interpretWalk({ risk_level: "catastrophic" }).risk, undefined);
     assert.equal(interpretWalk({}).risk, undefined);
+  });
+
+  it("reads skip_flagging=true (case-insensitive), false/absent otherwise", () => {
+    assert.equal(interpretWalk({ skip_flagging: "true" }).skipFlagging, true);
+    assert.equal(interpretWalk({ skip_flagging: "TRUE" }).skipFlagging, true);
+    assert.equal(interpretWalk({ skip_flagging: "false" }).skipFlagging, false);
+    assert.equal(interpretWalk({}).skipFlagging, false);
   });
 });
 

@@ -33404,20 +33404,33 @@ function getApprovalMode() {
   const m = (process.env.APPROVAL_MODE || "yolo").toLowerCase();
   return m === "manual" || m === "middle" ? m : "yolo";
 }
-function decideApproval(mode, reviewApproved, risk) {
+function decideApproval(mode, reviewApproved, risk, skipFlagging = false) {
+  if (skipFlagging) {
+    return {
+      apply: false,
+      requiresHuman: false,
+      noop: true,
+      reason: "no flag needed \u2014 nothing to review"
+    };
+  }
   if (!reviewApproved) {
-    return { apply: false, requiresHuman: false, reason: "code review REJECTED" };
+    return { apply: false, requiresHuman: false, noop: false, reason: "code review REJECTED" };
   }
   switch (mode) {
     case "yolo":
-      return { apply: true, requiresHuman: false, reason: "yolo: auto-apply on approval" };
+      return { apply: true, requiresHuman: false, noop: false, reason: "yolo: auto-apply on approval" };
     case "manual":
-      return { apply: false, requiresHuman: true, reason: "manual: awaiting human approval" };
+      return { apply: false, requiresHuman: true, noop: false, reason: "manual: awaiting human approval" };
     case "middle":
       if (risk === "high") {
-        return { apply: false, requiresHuman: true, reason: "middle: high risk \u2192 human approval" };
+        return { apply: false, requiresHuman: true, noop: false, reason: "middle: high risk \u2192 human approval" };
       }
-      return { apply: true, requiresHuman: false, reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply` };
+      return {
+        apply: true,
+        requiresHuman: false,
+        noop: false,
+        reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply`
+      };
   }
 }
 function interpretWalk(tags) {
@@ -33431,7 +33444,8 @@ function interpretWalk(tags) {
   tags.risk ?? // legacy
   "").toLowerCase();
   const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
-  return { reviewApproved, risk };
+  const skipFlagging = (tags.skip_flagging ?? "").toLowerCase() === "true";
+  return { reviewApproved, risk, skipFlagging };
 }
 
 // ../shared/dist/vegaClient.js
@@ -36515,14 +36529,16 @@ async function main() {
   console.log("\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 walk summary \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
   console.log(`Ran ${walk2.runs.length} node(s): ${walk2.runs.map((r) => r.configKey).join(" \u2192 ")}`);
   if (walk2.skipped.length) console.log(`Skipped: ${walk2.skipped.join(", ")}`);
-  const { reviewApproved, risk } = interpretWalk(walk2.tags);
+  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk2.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk);
+  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
   console.log(`Approval [${mode}] \u2192 ${decision.reason}`);
   if (decision.requiresHuman) {
     console.log("\u23F8 Human approval required \u2014 not auto-applied.");
   } else if (decision.apply) {
     console.log("\u2713 Changes approved and applied by the agents.");
+  } else if (decision.noop) {
+    console.log("\u2022 No flag needed \u2014 nothing to apply.");
   } else {
     console.log("\u2717 Not applied.");
   }
@@ -36535,7 +36551,7 @@ async function main() {
     `**Approval (${mode}):** ${decision.reason}`
   ].filter(Boolean).join("\n");
   await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
-  if (!decision.apply && !decision.requiresHuman) process.exitCode = 1;
+  if (!decision.apply && !decision.requiresHuman && !decision.noop) process.exitCode = 1;
 }
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((e) => {

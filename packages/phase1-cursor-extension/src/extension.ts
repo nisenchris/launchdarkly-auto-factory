@@ -166,7 +166,13 @@ async function runOnce(context: vscode.ExtensionContext, reason: string): Promis
         if (links.flag) output.appendLine(`Flag → ${links.flag.url}`);
         for (const m of links.metrics) output.appendLine(`Metric ${m.key} → ${m.url}`);
 
-        const verb = result.decision.requiresHuman ? "⏸ review required" : result.decision.apply ? "✓ approved" : "✗ rejected";
+        const verb = result.decision.requiresHuman
+          ? "⏸ review required"
+          : result.decision.apply
+            ? "✓ approved"
+            : result.decision.noop
+              ? "• no flag needed"
+              : "✗ rejected";
         const detail = links.flag ? ` — flag ${links.flag.key}` : "";
         const buttons = links.flag ? ["Open Flag in LaunchDarkly", "Show Output"] : ["Show Output"];
         const choice = await vscode.window.showInformationMessage(
