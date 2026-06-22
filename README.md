@@ -128,6 +128,18 @@ The `auto-factory-ai-provider` flag (factory project, string variations `anthrop
 selects the execution backend per run. It is optional: when the flag does not exist, the
 pipeline defaults to `anthropic`.
 
+### Per-step approval gates (optional)
+
+`auto-factory-approval-gates` (factory project, a **JSON flag** holding an array of agent
+node keys, default `[]`) pauses the chain **before** each listed agent until a human approves
+— independent of `approval_mode`, which governs the finished chain. For example,
+`["autofactory-flag-implementer"]` requires approval after research and before any flag is
+created. In the **GitHub Action**, a gated run halts and comments which PR label to add
+(`af-approve:<nodeKey>`); adding it re-runs the chain past that gate (the workflow template
+listens for the `labeled` event, and approval persists across pushes). In the **Cursor
+extension**, a modal asks to approve or stop at each gate. With the default empty array,
+behavior is unchanged.
+
 ## Phase 2 setup (Beacon)
 
 Phase 2 works end-to-end but is not yet a self-serve install; expect to read code. Summary
