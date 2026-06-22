@@ -1,0 +1,77 @@
+{
+  "$comment": "Source of truth for AutoFactory Phase 1 routing tags (issue #9 item #5). Each agent emits tags via tag_conversation (or a write tool sets them); the graph edges and the approval gate route on them. This registry is validated by `npm run check:configs` against the graph (config/agentcontrol/graphs/), the agent instructions (config/agentcontrol/ai-configs/), and the README table — so a renamed/removed/unconsumed tag fails the build instead of silently stalling the chain. Agents may emit additional INFORMATIONAL tags not listed here (e.g. tests_generated); only tags the system routes/decides on belong in this registry.",
+  "tags": {
+    "skip_flagging": {
+      "producedBy": "autofactory-research-planner",
+      "production": "llm",
+      "role": "routing",
+      "edges": [{ "from": "autofactory-research-planner", "to": "autofactory-flag-implementer", "kind": "skip_if_tags" }],
+      "readBy": ["approval"],
+      "description": "true when the PR needs no flag (Rule F11: infra/docs/chore). Short-circuits the chain at research; approval treats it as a successful no-op, not a rejection."
+    },
+    "flag_worthy": {
+      "producedBy": "autofactory-research-planner",
+      "production": "llm",
+      "role": "advisory",
+      "edges": [],
+      "readBy": [],
+      "description": "The research planner's flag-worthiness recommendation. Advisory: no edge or approval logic consumes it (skip_flagging is the actual routing signal). Forced by NODE_REQUIRED_TAGS so the planner always records a recommendation."
+    },
+    "flag_created": {
+      "producedBy": "autofactory-flag-implementer",
+      "production": "tool",
+      "role": "routing",
+      "edges": [{ "from": "autofactory-flag-implementer", "to": "autofactory-metrics-author", "kind": "require_tags" }],
+      "readBy": [],
+      "description": "true when a flag was created. Set automatically by the create_flag tool. Gates the hand-off to the metrics author."
+    },
+    "flag_key": {
+      "producedBy": "autofactory-flag-implementer",
+      "production": "tool",
+      "role": "informational",
+      "edges": [],
+      "readBy": ["manifest"],
+      "description": "The created flag's key. Set automatically by create_flag. Used for the release manifest and the editor's LaunchDarkly links."
+    },
+    "needs_tests": {
+      "producedBy": "autofactory-metrics-author",
+      "production": "llm",
+      "role": "routing",
+      "edges": [{ "from": "autofactory-metrics-author", "to": "autofactory-flag-testing", "kind": "require_tags" }],
+      "readBy": [],
+      "description": "true to route to the testing agent. Forced by NODE_REQUIRED_TAGS so the metrics author always hands off."
+    },
+    "metrics_created": {
+      "producedBy": "autofactory-metrics-author",
+      "production": "tool",
+      "role": "informational",
+      "edges": [],
+      "readBy": [],
+      "description": "true if any guarded-release metric was created or reused. Set automatically by the create_metric tool."
+    },
+    "metric_keys": {
+      "producedBy": "autofactory-metrics-author",
+      "production": "tool",
+      "role": "informational",
+      "edges": [],
+      "readBy": ["manifest"],
+      "description": "Comma-separated metric keys attached. Set automatically by create_metric. Written into the release manifest and the editor's links."
+    },
+    "review_approved": {
+      "producedBy": "autofactory-code-reviewer",
+      "production": "llm",
+      "role": "verdict",
+      "edges": [],
+      "readBy": ["approval"],
+      "description": "The reviewer's verdict (approve/approved/true vs reject/rejected/false). Read by the approval gate. Forced by NODE_REQUIRED_TAGS so the reviewer always records a verdict; absence means the reviewer never ran (INCOMPLETE), not a rejection."
+    },
+    "risk_level": {
+      "producedBy": "autofactory-code-reviewer",
+      "production": "llm",
+      "role": "verdict",
+      "edges": [],
+      "readBy": ["approval"],
+      "description": "low / medium / high. Read by the approval gate; gates the `middle` mode (high risk requires a human)."
+    }
+  }
+}

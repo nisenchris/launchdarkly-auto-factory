@@ -17,6 +17,21 @@ Status legend: ✅ done · 🔜 planned/in progress
 
 ## 2026-06-22
 
+### ✅ Tag registry as source of truth (issue #9 item #5)
+- **Change:** added `config/agentcontrol/tags.json` — the machine-readable
+  registry of every routing/verdict tag (producer, `llm` vs `tool` production,
+  the graph edges that consume it, and whether approval/manifest reads it).
+- **Guard upgrade:** `check-configs` now validates against the registry exactly
+  instead of a token heuristic — bidirectional graph⟷registry edge checks,
+  producer verification (an `llm` tag must appear in its agent's instructions; a
+  `tool` tag must be in the write-tool auto-set), and a README-table⟷registry
+  equality check.
+- **Resolved a real drift it surfaced:** `flag_worthy` was emitted by the
+  research planner and forced by the runner, but consumed by no edge and absent
+  from the README table. Documented it as **advisory** (recorded but not routed
+  on) in both the registry and the README "Canonical agent tags" table. Also
+  fixed a stale `approval.ts` path in the README (moved to `packages/shared`).
+
 ### ✅ Fixed invalid `tag_conversation` signature in committed configs + added a routing-contract guard
 - **Problem (issue #9, failure mode #1):** `autofactory-metrics-author` and
   `autofactory-research-planner` instructed the model to call

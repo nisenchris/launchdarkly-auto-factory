@@ -172,7 +172,9 @@ async function runOnce(context: vscode.ExtensionContext, reason: string): Promis
             ? "✓ approved"
             : result.decision.noop
               ? "• no flag needed"
-              : "✗ rejected";
+              : result.decision.incomplete
+                ? "⚠ incomplete"
+                : "✗ rejected";
         const detail = links.flag ? ` — flag ${links.flag.key}` : "";
         const buttons = links.flag ? ["Open Flag in LaunchDarkly", "Show Output"] : ["Show Output"];
         const choice = await vscode.window.showInformationMessage(

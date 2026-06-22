@@ -14,6 +14,7 @@ import {
   GraphQLVegaTransport,
   LdClient,
   LdResourceWriter,
+  type StallInfo,
   StubVegaTransport,
   VegaAgentRunner,
   VegaClient,
@@ -105,6 +106,17 @@ function flagCreationWriter(): LdResourceWriter | undefined {
 }
 
 /**
+ * Human-readable description of a chain stall (unmet handoff) for logs, the GH
+ * annotation, and the PR comment.
+ */
+function describeStall(stall: StallInfo): string {
+  const edges = stall.unmet
+    .map((u) => `edge → ${u.target} requires ${Object.entries(u.requireMissing).map(([k, v]) => `${k}=${v}`).join(", ")} (never produced)`)
+    .join("; ");
+  return `chain stalled at '${stall.node}'; ${edges}. Downstream agents did not run.`;
+}
+
+/**
  * Variables for AI-config instruction interpolation (done by LaunchDarkly's AI
  * SDK). Run-level values only; per-step output flows through the node prompt.
  * LAUNCHDARKLY_PROJECT points at the data-plane app project where flags are created.
@@ -182,9 +194,16 @@ async function main(): Promise<void> {
   console.log(`Ran ${walk.runs.length} node(s): ${walk.runs.map((r) => r.configKey).join(" → ")}`);
   if (walk.skipped.length) console.log(`Skipped: ${walk.skipped.join(", ")}`);
 
-  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk.tags);
+  // Make a stall observable: when the chain stops on an unmet handoff (a required
+  // routing tag was never produced) rather than at a terminal node, say so loudly
+  // — as a GitHub Actions warning annotation and in the PR comment — instead of
+  // letting it surface only as a misleading verdict (issue #9 item #3).
+  const stallText = walk.stalledAt ? describeStall(walk.stalledAt) : "";
+  if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
+
+  const verdict = interpretWalk(walk.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
+  const decision = decideApproval(mode, verdict);
 
   console.log(`Approval [${mode}] → ${decision.reason}`);
   if (decision.requiresHuman) {
@@ -193,8 +212,10 @@ async function main(): Promise<void> {
     console.log("✓ Changes approved and applied by the agents.");
   } else if (decision.noop) {
     console.log("• No flag needed — nothing to apply.");
+  } else if (decision.incomplete) {
+    console.log("⚠ Incomplete — the chain did not complete a code review (see the stall above).");
   } else {
-    console.log("✗ Not applied.");
+    console.log("✗ Not applied — code review REJECTED.");
   }
 
   const summary = [
@@ -202,6 +223,7 @@ async function main(): Promise<void> {
     "",
     `**Agents:** ${walk.runs.map((r) => r.configKey).join(" → ") || "(none ran)"}`,
     walk.skipped.length ? `**Skipped:** ${walk.skipped.join(", ")}` : "",
+    stallText ? `**⚠ Stalled:** ${stallText}` : "",
     "",
     `**Approval (${mode}):** ${decision.reason}`,
   ]
@@ -209,8 +231,10 @@ async function main(): Promise<void> {
     .join("\n");
   await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
 
-  // Non-zero exit signals the PR check should fail (genuine rejection only). A
-  // no-op (no flag needed) and a human-approval pause both leave the check green.
+  // Non-zero exit fails the PR check. Green: applied, human-approval pause, or a
+  // no-op (no flag needed). Red: a genuine rejection OR an incomplete run (the
+  // chain stalled / never reviewed) — both warrant attention, but they now carry
+  // distinct messages above rather than both reading "REJECTED".
   if (!decision.apply && !decision.requiresHuman && !decision.noop) process.exitCode = 1;
 }
 

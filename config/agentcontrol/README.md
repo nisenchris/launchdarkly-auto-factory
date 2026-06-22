@@ -41,11 +41,15 @@ re-provisioned into a fresh project) to take effect.
 ## Canonical agent tags
 
 Agents drive routing and approval by emitting tags (via `tag_conversation`).
-These are the canonical keys the pipeline reads; emit exactly these:
+These are the canonical keys the pipeline reads; emit exactly these. The
+machine-readable source of truth is [`tags.json`](tags.json) (producer, how it's
+produced, consuming edges) — `npm run check:configs` enforces that this table,
+the registry, the graph, and the instructions all agree.
 
 | Tag | Set by | Meaning |
 |-----|--------|---------|
 | `skip_flagging` | research-planner | `"true"`: this PR needs no flag (short-circuits the chain) |
+| `flag_worthy` | research-planner | the planner's flag-worthiness recommendation; advisory (no edge consumes it), but always recorded |
 | `flag_created` | flag-implementer | `"true"`: a flag was created (set automatically by `create_flag`) |
 | `flag_key` | flag-implementer | the created flag's key (set automatically by `create_flag`) |
 | `needs_tests` | metrics-author | `"true"`: route to the testing agent |
@@ -54,7 +58,7 @@ These are the canonical keys the pipeline reads; emit exactly these:
 | `metric_keys` | metrics-author | comma-separated metric keys attached (set automatically by `create_metric`) |
 | `risk_level` | code-reviewer | `low` / `medium` / `high`; gates the `middle` approval mode |
 
-`interpretWalk` (`packages/phase1-resource-factory/src/approval.ts`) reads
+`interpretWalk` (`packages/shared/src/approval.ts`) reads
 `review_approved` / `risk_level` first and accepts a few legacy keys
 (`review_decision`/`decision`/`approved`, `risk`) only as fallbacks.
 

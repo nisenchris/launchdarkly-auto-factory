@@ -33351,6 +33351,7 @@ async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
   const visited = /* @__PURE__ */ new Set();
   let node = graphDef.rootNode();
   let inboundHandoff;
+  let stalledAt;
   while (node && !visited.has(node.getKey())) {
     const key = node.getKey();
     visited.add(key);
@@ -33389,6 +33390,29 @@ async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
       nextHandoff = h;
       break;
     }
+    if (!next) {
+      const edges = node.getEdges();
+      const unmet = [];
+      for (const edge of edges) {
+        const h = edge.handoff;
+        const skip = handoffTags(h, "skip_if_tags");
+        if (skip && tagsMatch(accumulatedTags, skip))
+          continue;
+        const require2 = handoffTags(h, "require_tags");
+        if (require2 && !tagsMatch(accumulatedTags, require2)) {
+          const requireMissing = {};
+          for (const [k, v] of Object.entries(require2)) {
+            if (accumulatedTags[k] !== v)
+              requireMissing[k] = v;
+          }
+          unmet.push({ target: edge.key, requireMissing });
+        }
+      }
+      if (unmet.length > 0) {
+        stalledAt = { node: key, tags: { ...accumulatedTags }, unmet };
+        onEvent?.({ type: "stalled", stall: stalledAt });
+      }
+    }
     if (next)
       graphTracker?.trackHandoffSuccess(key, next);
     node = next ? graphDef.getNode(next) : null;
@@ -33396,7 +33420,7 @@ async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
   }
   const reached = new Set(runs.map((r) => r.configKey));
   const skipped = allNodeKeys(graphDef).filter((k) => !reached.has(k));
-  return { runs, tags: accumulatedTags, skipped };
+  return { runs, tags: accumulatedTags, skipped, ...stalledAt ? { stalledAt } : {} };
 }
 
 // ../shared/dist/approval.js
@@ -33404,48 +33428,43 @@ function getApprovalMode() {
   const m = (process.env.APPROVAL_MODE || "yolo").toLowerCase();
   return m === "manual" || m === "middle" ? m : "yolo";
 }
-function decideApproval(mode, reviewApproved, risk, skipFlagging = false) {
-  if (skipFlagging) {
-    return {
-      apply: false,
-      requiresHuman: false,
-      noop: true,
-      reason: "no flag needed \u2014 nothing to review"
-    };
+function decideApproval(mode, verdict) {
+  const base = { apply: false, requiresHuman: false, noop: false, incomplete: false };
+  if (verdict.skipFlagging) {
+    return { ...base, noop: true, reason: "no flag needed \u2014 nothing to review" };
   }
-  if (!reviewApproved) {
-    return { apply: false, requiresHuman: false, noop: false, reason: "code review REJECTED" };
+  if (!verdict.hasVerdict) {
+    return { ...base, incomplete: true, reason: "INCOMPLETE \u2014 the code reviewer never produced a verdict" };
+  }
+  if (!verdict.reviewApproved) {
+    return { ...base, reason: "code review REJECTED" };
   }
   switch (mode) {
     case "yolo":
-      return { apply: true, requiresHuman: false, noop: false, reason: "yolo: auto-apply on approval" };
+      return { ...base, apply: true, reason: "yolo: auto-apply on approval" };
     case "manual":
-      return { apply: false, requiresHuman: true, noop: false, reason: "manual: awaiting human approval" };
+      return { ...base, requiresHuman: true, reason: "manual: awaiting human approval" };
     case "middle":
-      if (risk === "high") {
-        return { apply: false, requiresHuman: true, noop: false, reason: "middle: high risk \u2192 human approval" };
+      if (verdict.risk === "high") {
+        return { ...base, requiresHuman: true, reason: "middle: high risk \u2192 human approval" };
       }
-      return {
-        apply: true,
-        requiresHuman: false,
-        noop: false,
-        reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply`
-      };
+      return { ...base, apply: true, reason: `middle: ${verdict.risk ?? "unknown"} risk \u2192 auto-apply` };
   }
 }
 function interpretWalk(tags) {
-  const decision = (tags.review_approved ?? // canonical
+  const rawDecision = (tags.review_approved ?? // canonical
   tags.review_decision ?? // legacy
   tags.decision ?? // legacy
   tags.approved ?? // legacy
   "").toLowerCase();
-  const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
+  const hasVerdict = rawDecision !== "";
+  const reviewApproved = rawDecision === "approve" || rawDecision === "approved" || rawDecision === "true";
   const rawRisk = (tags.risk_level ?? // canonical
   tags.risk ?? // legacy
   "").toLowerCase();
   const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
   const skipFlagging = (tags.skip_flagging ?? "").toLowerCase() === "true";
-  return { reviewApproved, risk, skipFlagging };
+  return { reviewApproved, hasVerdict, risk, skipFlagging };
 }
 
 // ../shared/dist/vegaClient.js
@@ -36503,6 +36522,10 @@ function flagCreationWriter() {
   }
   return new LdResourceWriter(new LdClient(appConnection()));
 }
+function describeStall(stall) {
+  const edges = stall.unmet.map((u) => `edge \u2192 ${u.target} requires ${Object.entries(u.requireMissing).map(([k, v]) => `${k}=${v}`).join(", ")} (never produced)`).join("; ");
+  return `chain stalled at '${stall.node}'; ${edges}. Downstream agents did not run.`;
+}
 function buildVariables(ctx) {
   return {
     PR_NUMBER: ctx.PR_NUMBER ?? "",
@@ -36564,9 +36587,11 @@ async function main() {
   console.log("\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 walk summary \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500");
   console.log(`Ran ${walk2.runs.length} node(s): ${walk2.runs.map((r) => r.configKey).join(" \u2192 ")}`);
   if (walk2.skipped.length) console.log(`Skipped: ${walk2.skipped.join(", ")}`);
-  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk2.tags);
+  const stallText = walk2.stalledAt ? describeStall(walk2.stalledAt) : "";
+  if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
+  const verdict = interpretWalk(walk2.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
+  const decision = decideApproval(mode, verdict);
   console.log(`Approval [${mode}] \u2192 ${decision.reason}`);
   if (decision.requiresHuman) {
     console.log("\u23F8 Human approval required \u2014 not auto-applied.");
@@ -36574,14 +36599,17 @@ async function main() {
     console.log("\u2713 Changes approved and applied by the agents.");
   } else if (decision.noop) {
     console.log("\u2022 No flag needed \u2014 nothing to apply.");
+  } else if (decision.incomplete) {
+    console.log("\u26A0 Incomplete \u2014 the chain did not complete a code review (see the stall above).");
   } else {
-    console.log("\u2717 Not applied.");
+    console.log("\u2717 Not applied \u2014 code review REJECTED.");
   }
   const summary = [
     "### LaunchDarkly Auto-Factory \u2014 Phase 1",
     "",
     `**Agents:** ${walk2.runs.map((r) => r.configKey).join(" \u2192 ") || "(none ran)"}`,
     walk2.skipped.length ? `**Skipped:** ${walk2.skipped.join(", ")}` : "",
+    stallText ? `**\u26A0 Stalled:** ${stallText}` : "",
     "",
     `**Approval (${mode}):** ${decision.reason}`
   ].filter(Boolean).join("\n");

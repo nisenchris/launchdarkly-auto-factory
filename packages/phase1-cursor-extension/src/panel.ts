@@ -87,6 +87,7 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
       apply: result.decision.apply,
       requiresHuman: result.decision.requiresHuman,
       noop: result.decision.noop,
+      incomplete: result.decision.incomplete,
       flag: links.flag ?? null,
       metrics: links.metrics,
     });
@@ -181,7 +182,7 @@ export class AutoFactoryViewProvider implements vscode.WebviewViewProvider {
       runBtn.disabled = false;
       $("sub").textContent = "Done.";
       const s = $("summary"); s.classList.add("show");
-      const icon = m.requiresHuman ? "⏸" : (m.apply ? "✓" : (m.noop ? "•" : "✗"));
+      const icon = m.requiresHuman ? "⏸" : (m.apply ? "✓" : (m.noop ? "•" : (m.incomplete ? "⚠" : "✗")));
       const link = (r) => '<a class="ldlink" data-url="' + r.url + '" href="#" title="Open in LaunchDarkly">' + r.key + '</a>';
       let html = '<div class="verdict">' + icon + ' Review: ' + m.verdict + '</div>';
       html += '<div>' + m.reason + '</div>';
