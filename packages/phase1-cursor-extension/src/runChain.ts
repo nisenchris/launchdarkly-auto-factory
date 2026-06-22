@@ -86,9 +86,9 @@ export async function runPhase1(opts: RunOptions): Promise<RunResult> {
     else reporter.nodeComplete(event.run);
   });
 
-  const { reviewApproved, risk } = interpretWalk(walk.tags);
+  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk);
+  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
 
   const result: RunResult = {
     runs: walk.runs,

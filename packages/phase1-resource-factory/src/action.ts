@@ -182,15 +182,17 @@ async function main(): Promise<void> {
   console.log(`Ran ${walk.runs.length} node(s): ${walk.runs.map((r) => r.configKey).join(" → ")}`);
   if (walk.skipped.length) console.log(`Skipped: ${walk.skipped.join(", ")}`);
 
-  const { reviewApproved, risk } = interpretWalk(walk.tags);
+  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk);
+  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
 
   console.log(`Approval [${mode}] → ${decision.reason}`);
   if (decision.requiresHuman) {
     console.log("⏸ Human approval required — not auto-applied.");
   } else if (decision.apply) {
     console.log("✓ Changes approved and applied by the agents.");
+  } else if (decision.noop) {
+    console.log("• No flag needed — nothing to apply.");
   } else {
     console.log("✗ Not applied.");
   }
@@ -207,8 +209,9 @@ async function main(): Promise<void> {
     .join("\n");
   await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
 
-  // Non-zero exit signals the PR check should fail (rejected).
-  if (!decision.apply && !decision.requiresHuman) process.exitCode = 1;
+  // Non-zero exit signals the PR check should fail (genuine rejection only). A
+  // no-op (no flag needed) and a human-approval pause both leave the check green.
+  if (!decision.apply && !decision.requiresHuman && !decision.noop) process.exitCode = 1;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
