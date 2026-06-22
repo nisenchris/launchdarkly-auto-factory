@@ -22,14 +22,17 @@ import {
   appConnection,
   closeLdSdk,
   decideApproval,
+  type GateController,
   getApprovalMode,
   getLdSdk,
   interpretWalk,
   pipelineContext,
   resolveAiProvider,
+  resolveApprovalGates,
   walkGraph,
 } from "@auto-factory/shared";
 import { postPrComment } from "./comment.js";
+import { approveLabel, ensureLabel, fetchApprovedSteps } from "./labels.js";
 import { type PrContext, assemblePrContext } from "./prContext.js";
 
 /**
@@ -117,6 +120,28 @@ function describeStall(stall: StallInfo): string {
 }
 
 /**
+ * Status-board PR comment when the chain halts at an approval gate: lists every
+ * gated step with its state (✓ approved / ⏸ awaiting now / ⬜ gated, later), and
+ * the exact label to add to proceed. This is the human-readable view; the label
+ * chips are the at-a-glance approved state.
+ */
+function buildGateComment(gatedSteps: string[], approved: Set<string>, pendingNode: string): string {
+  const lines = gatedSteps.map((step) => {
+    if (approved.has(step)) return `- ✓ \`${step}\` — approved`;
+    if (step === pendingNode) return `- ⏸ \`${step}\` — **awaiting approval**: add the label \`${approveLabel(step)}\``;
+    return `- ⬜ \`${step}\` — gated (after the step above)`;
+  });
+  return [
+    "### LaunchDarkly Auto-Factory — Phase 1 ⏸ awaiting approval",
+    "",
+    `The chain paused before **${pendingNode}**. Nothing was created for this or later steps yet.`,
+    "Approve by adding the labeled step below; the chain resumes on the next run.",
+    "",
+    ...lines,
+  ].join("\n");
+}
+
+/**
  * Variables for AI-config instruction interpolation (done by LaunchDarkly's AI
  * SDK). Run-level values only; per-step output flows through the node prompt.
  * LAUNCHDARKLY_PROJECT points at the data-plane app project where flags are created.
@@ -181,7 +206,21 @@ async function main(): Promise<void> {
   console.log(`Phase 1: PR #${context.PR_NUMBER ?? "?"} → graph '${graphKey}' [provider: ${provider}]`);
 
   const runner = createAgentRunner(provider);
-  const walk = await walkGraph(graphDef, runner, context, graphTracker);
+
+  // Per-step approval gates (independent of APPROVAL_MODE). Gated agent node
+  // keys come from the auto-factory-approval-gates flag; a gate is satisfied by
+  // a PR label `af-approve:<nodeKey>`. The chain halts before a gated node until
+  // its label is present (a re-run after the label is added proceeds).
+  const gatedSteps = await resolveApprovalGates(ldClient, ldContext);
+  let approvedSteps = new Set<string>();
+  let gate: GateController | undefined;
+  if (gatedSteps.length) {
+    approvedSteps = await fetchApprovedSteps(context.REPO, context.PR_NUMBER, process.env.GITHUB_TOKEN);
+    gate = { steps: gatedSteps, resolve: (node) => approvedSteps.has(node) };
+    console.log(`Approval gates: [${gatedSteps.join(", ")}]; approved: [${[...approvedSteps].join(", ") || "none"}]`);
+  }
+
+  const walk = await walkGraph(graphDef, runner, context, graphTracker, undefined, gate);
 
   // Per-node visibility: dump each agent's terminal status, routing tags, and final output.
   for (const r of walk.runs) {
@@ -200,6 +239,21 @@ async function main(): Promise<void> {
   // letting it surface only as a misleading verdict (issue #9 item #3).
   const stallText = walk.stalledAt ? describeStall(walk.stalledAt) : "";
   if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
+
+  // Halted at an approval gate: report what's pending + how to approve, then
+  // stop. The flag/code for the gated step have NOT been created. A re-run once
+  // the label is added proceeds past the gate.
+  if (walk.pendingApproval) {
+    const node = walk.pendingApproval.node;
+    const label = approveLabel(node);
+    await ensureLabel(context.REPO, label, process.env.GITHUB_TOKEN);
+    console.log(`::warning::AutoFactory: awaiting approval before '${node}'. Add the PR label '${label}' to proceed.`);
+    const summary = buildGateComment(gatedSteps, approvedSteps, node);
+    await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
+    // Red check: action required. The chain is paused, not finished.
+    process.exitCode = 1;
+    return;
+  }
 
   const verdict = interpretWalk(walk.tags);
   const mode = getApprovalMode();

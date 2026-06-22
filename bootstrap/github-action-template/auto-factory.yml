@@ -1,17 +1,22 @@
 # Drop this into your app repo at .github/workflows/auto-factory.yml
 #
-# Phase 1 runs on every PR (opened/updated); there is no label gate. The agent
-# chain runs on the Anthropic API by default. The auto-factory-ai-provider flag
-# in the factory project selects the backend; it is optional and defaults to
-# "anthropic" when absent. With flag creation and code changes enabled, the
-# agents create a real flag (targeting off), wire it into the code, instrument
-# metrics, add tests, and push to the PR branch.
+# Phase 1 runs on every PR (opened/updated). The agent chain runs on the
+# Anthropic API by default. The auto-factory-ai-provider flag in the factory
+# project selects the backend; it is optional and defaults to "anthropic" when
+# absent. With flag creation and code changes enabled, the agents create a real
+# flag (targeting off), wire it into the code, instrument metrics, add tests,
+# and push to the PR branch.
+#
+# Per-step approval gates (optional): the auto-factory-approval-gates flag (an
+# array of agent node keys) pauses the chain before those steps. The run halts
+# and comments which label to add (af-approve:<step>); the `labeled` trigger
+# below makes adding that label re-run the chain so it proceeds past the gate.
 
 name: LaunchDarkly Auto-Factory
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: write        # agents commit flag wiring, metrics, and tests to the PR branch

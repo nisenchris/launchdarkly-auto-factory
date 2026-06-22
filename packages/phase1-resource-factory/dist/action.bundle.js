@@ -33344,16 +33344,23 @@ function allNodeKeys(graphDef) {
   }
   return [...keys];
 }
-async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
+async function walkGraph(graphDef, runner, context, graphTracker, onEvent, gate) {
   const runs = [];
   const accumulatedTags = {};
   const ctx = { ...context };
+  const gatedSteps = new Set(gate?.steps ?? []);
   const visited = /* @__PURE__ */ new Set();
   let node = graphDef.rootNode();
   let inboundHandoff;
   let stalledAt;
+  let pendingApproval;
   while (node && !visited.has(node.getKey())) {
     const key = node.getKey();
+    if (gate && gatedSteps.has(key) && !await gate.resolve(key)) {
+      pendingApproval = { node: key };
+      onEvent?.({ type: "awaiting-approval", node: key });
+      break;
+    }
     visited.add(key);
     const cfg = node.getConfig();
     const maxTurns = handoffNumber(inboundHandoff, "max_turns");
@@ -33420,7 +33427,13 @@ async function walkGraph(graphDef, runner, context, graphTracker, onEvent) {
   }
   const reached = new Set(runs.map((r) => r.configKey));
   const skipped = allNodeKeys(graphDef).filter((k) => !reached.has(k));
-  return { runs, tags: accumulatedTags, skipped, ...stalledAt ? { stalledAt } : {} };
+  return {
+    runs,
+    tags: accumulatedTags,
+    skipped,
+    ...stalledAt ? { stalledAt } : {},
+    ...pendingApproval ? { pendingApproval } : {}
+  };
 }
 
 // ../shared/dist/approval.js
@@ -33465,6 +33478,27 @@ function interpretWalk(tags) {
   const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
   const skipFlagging = (tags.skip_flagging ?? "").toLowerCase() === "true";
   return { reviewApproved, hasVerdict, risk, skipFlagging };
+}
+
+// ../shared/dist/approvalGates.js
+var APPROVAL_GATES_FLAG_KEY = "auto-factory-approval-gates";
+function toSteps(value) {
+  if (!Array.isArray(value))
+    return [];
+  return value.filter((v) => typeof v === "string" && v.length > 0);
+}
+async function resolveApprovalGates(ldClient, context, flagKey = APPROVAL_GATES_FLAG_KEY) {
+  loadDotEnv();
+  const env = process.env.APPROVAL_GATES?.trim();
+  if (env) {
+    try {
+      return toSteps(JSON.parse(env));
+    } catch {
+      return toSteps(env.split(",").map((s) => s.trim()));
+    }
+  }
+  const value = await ldClient.variation(flagKey, context, []);
+  return toSteps(value);
 }
 
 // ../shared/dist/vegaClient.js
@@ -36446,6 +36480,45 @@ async function findExistingComment(repo, prNumber, headers) {
   }
 }
 
+// src/labels.ts
+var APPROVE_LABEL_PREFIX = "af-approve:";
+function approveLabel(nodeKey) {
+  return `${APPROVE_LABEL_PREFIX}${nodeKey}`;
+}
+var ghHeaders = (token) => ({
+  Authorization: `Bearer ${token}`,
+  Accept: "application/vnd.github+json",
+  "X-GitHub-Api-Version": "2022-11-28",
+  "Content-Type": "application/json"
+});
+async function fetchApprovedSteps(repo, prNumber, token) {
+  const approved = /* @__PURE__ */ new Set();
+  if (!repo || !prNumber || !token) return approved;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/issues/${prNumber}/labels?per_page=100`, {
+      headers: ghHeaders(token)
+    });
+    if (!res.ok) return approved;
+    const labels = await res.json();
+    for (const l of labels) {
+      if (l.name?.startsWith(APPROVE_LABEL_PREFIX)) approved.add(l.name.slice(APPROVE_LABEL_PREFIX.length));
+    }
+  } catch {
+  }
+  return approved;
+}
+async function ensureLabel(repo, name, token) {
+  if (!repo || !token) return;
+  try {
+    await fetch(`https://api.github.com/repos/${repo}/labels`, {
+      method: "POST",
+      headers: ghHeaders(token),
+      body: JSON.stringify({ name, color: "0e8a16", description: "AutoFactory: approve this gated step to proceed" })
+    });
+  } catch {
+  }
+}
+
 // src/prContext.ts
 import { existsSync as existsSync3, readFileSync as readFileSync3 } from "node:fs";
 function assemblePrContext() {
@@ -36526,6 +36599,21 @@ function describeStall(stall) {
   const edges = stall.unmet.map((u) => `edge \u2192 ${u.target} requires ${Object.entries(u.requireMissing).map(([k, v]) => `${k}=${v}`).join(", ")} (never produced)`).join("; ");
   return `chain stalled at '${stall.node}'; ${edges}. Downstream agents did not run.`;
 }
+function buildGateComment(gatedSteps, approved, pendingNode) {
+  const lines = gatedSteps.map((step) => {
+    if (approved.has(step)) return `- \u2713 \`${step}\` \u2014 approved`;
+    if (step === pendingNode) return `- \u23F8 \`${step}\` \u2014 **awaiting approval**: add the label \`${approveLabel(step)}\``;
+    return `- \u2B1C \`${step}\` \u2014 gated (after the step above)`;
+  });
+  return [
+    "### LaunchDarkly Auto-Factory \u2014 Phase 1 \u23F8 awaiting approval",
+    "",
+    `The chain paused before **${pendingNode}**. Nothing was created for this or later steps yet.`,
+    "Approve by adding the labeled step below; the chain resumes on the next run.",
+    "",
+    ...lines
+  ].join("\n");
+}
 function buildVariables(ctx) {
   return {
     PR_NUMBER: ctx.PR_NUMBER ?? "",
@@ -36577,7 +36665,15 @@ async function main() {
   const graphTracker = graphDef.createTracker();
   console.log(`Phase 1: PR #${context.PR_NUMBER ?? "?"} \u2192 graph '${graphKey}' [provider: ${provider}]`);
   const runner = createAgentRunner(provider);
-  const walk2 = await walkGraph(graphDef, runner, context, graphTracker);
+  const gatedSteps = await resolveApprovalGates(ldClient, ldContext);
+  let approvedSteps = /* @__PURE__ */ new Set();
+  let gate;
+  if (gatedSteps.length) {
+    approvedSteps = await fetchApprovedSteps(context.REPO, context.PR_NUMBER, process.env.GITHUB_TOKEN);
+    gate = { steps: gatedSteps, resolve: (node) => approvedSteps.has(node) };
+    console.log(`Approval gates: [${gatedSteps.join(", ")}]; approved: [${[...approvedSteps].join(", ") || "none"}]`);
+  }
+  const walk2 = await walkGraph(graphDef, runner, context, graphTracker, void 0, gate);
   for (const r of walk2.runs) {
     console.log(`
 \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550 ${r.configKey} [${r.status}] \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550`);
@@ -36589,6 +36685,16 @@ async function main() {
   if (walk2.skipped.length) console.log(`Skipped: ${walk2.skipped.join(", ")}`);
   const stallText = walk2.stalledAt ? describeStall(walk2.stalledAt) : "";
   if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
+  if (walk2.pendingApproval) {
+    const node = walk2.pendingApproval.node;
+    const label = approveLabel(node);
+    await ensureLabel(context.REPO, label, process.env.GITHUB_TOKEN);
+    console.log(`::warning::AutoFactory: awaiting approval before '${node}'. Add the PR label '${label}' to proceed.`);
+    const summary2 = buildGateComment(gatedSteps, approvedSteps, node);
+    await postPrComment(summary2, { prNumber: context.PR_NUMBER, repo: context.REPO });
+    process.exitCode = 1;
+    return;
+  }
   const verdict = interpretWalk(walk2.tags);
   const mode = getApprovalMode();
   const decision = decideApproval(mode, verdict);

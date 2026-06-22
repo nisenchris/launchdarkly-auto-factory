@@ -15,6 +15,42 @@ Status legend: ✅ done · 🔜 planned/in progress
 
 ---
 
+## 2026-06-23
+
+### ✅ Per-step approval gates (`auto-factory-approval-gates` flag)
+- **New operational flag** in the factory project: `auto-factory-approval-gates`,
+  a **JSON flag** whose value is an array of agent node keys (e.g.
+  `["autofactory-flag-implementer"]`). The chain pauses BEFORE each listed
+  agent until a human approves. Default `[]` = no gates (current behavior).
+  Read natively via the SDK (same pattern as `auto-factory-ai-provider`).
+- **Independent of `APPROVAL_MODE`.** `APPROVAL_MODE` still governs whether the
+  FINISHED chain auto-applies; gates pause MID-chain (before a step's side
+  effects). The original ask — approve after research, before flag creation —
+  is `["autofactory-flag-implementer"]`.
+- **How approval is given:**
+  - **GitHub Action:** the run halts and comments which PR label to add
+    (`af-approve:<nodeKey>`); adding it re-triggers the workflow (template now
+    includes the `labeled` event) and the re-run proceeds. Approval persists
+    across pushes. A pending gate is a red check (action required).
+  - **Cursor extension:** an interactive Approve/Stop modal blocks the in-process
+    run at each gate.
+- Code: `packages/shared/src/approvalGates.ts` + a `GateController` hook in the
+  walker; `packages/phase1-resource-factory/src/labels.ts` for the GHA labels.
+
+### ✅ Operational flags now bootstrap-provisioned (off by default)
+- **Change:** the two operational flags (`auto-factory-ai-provider`,
+  `auto-factory-approval-gates`) now have committed definitions under
+  `config/agentcontrol/flags/`, and `config-bridge provision`/`seed` (hence
+  `npm run bootstrap`) create them in the factory project alongside the AI
+  configs + graph. Previously only AI configs + graphs were provisioned, so a
+  fresh consumer project had no operational flags until created by hand.
+- **Safe by default:** each is provisioned **off** — provider serves `anthropic`,
+  gates serve `[]` (no gates) — so behavior is unchanged until a maintainer flips
+  it. Provisioning is idempotent and 404-tolerant: an existing flag (and its
+  targeting) is never overwritten.
+- Code: `packages/config-bridge/src/provision.ts` (`provisionFlag`, `flagsDir`),
+  `config/agentcontrol/flags/*.json`.
+
 ## 2026-06-22
 
 ### ✅ Tag registry as source of truth (issue #9 item #5)
