@@ -201,9 +201,9 @@ async function main(): Promise<void> {
   const stallText = walk.stalledAt ? describeStall(walk.stalledAt) : "";
   if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
 
-  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk.tags);
+  const verdict = interpretWalk(walk.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
+  const decision = decideApproval(mode, verdict);
 
   console.log(`Approval [${mode}] → ${decision.reason}`);
   if (decision.requiresHuman) {
@@ -212,8 +212,10 @@ async function main(): Promise<void> {
     console.log("✓ Changes approved and applied by the agents.");
   } else if (decision.noop) {
     console.log("• No flag needed — nothing to apply.");
+  } else if (decision.incomplete) {
+    console.log("⚠ Incomplete — the chain did not complete a code review (see the stall above).");
   } else {
-    console.log("✗ Not applied.");
+    console.log("✗ Not applied — code review REJECTED.");
   }
 
   const summary = [
@@ -229,8 +231,10 @@ async function main(): Promise<void> {
     .join("\n");
   await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
 
-  // Non-zero exit signals the PR check should fail (genuine rejection only). A
-  // no-op (no flag needed) and a human-approval pause both leave the check green.
+  // Non-zero exit fails the PR check. Green: applied, human-approval pause, or a
+  // no-op (no flag needed). Red: a genuine rejection OR an incomplete run (the
+  // chain stalled / never reviewed) — both warrant attention, but they now carry
+  // distinct messages above rather than both reading "REJECTED".
   if (!decision.apply && !decision.requiresHuman && !decision.noop) process.exitCode = 1;
 }
 

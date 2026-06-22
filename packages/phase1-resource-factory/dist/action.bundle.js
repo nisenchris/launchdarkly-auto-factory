@@ -33428,48 +33428,43 @@ function getApprovalMode() {
   const m = (process.env.APPROVAL_MODE || "yolo").toLowerCase();
   return m === "manual" || m === "middle" ? m : "yolo";
 }
-function decideApproval(mode, reviewApproved, risk, skipFlagging = false) {
-  if (skipFlagging) {
-    return {
-      apply: false,
-      requiresHuman: false,
-      noop: true,
-      reason: "no flag needed \u2014 nothing to review"
-    };
+function decideApproval(mode, verdict) {
+  const base = { apply: false, requiresHuman: false, noop: false, incomplete: false };
+  if (verdict.skipFlagging) {
+    return { ...base, noop: true, reason: "no flag needed \u2014 nothing to review" };
   }
-  if (!reviewApproved) {
-    return { apply: false, requiresHuman: false, noop: false, reason: "code review REJECTED" };
+  if (!verdict.hasVerdict) {
+    return { ...base, incomplete: true, reason: "INCOMPLETE \u2014 the code reviewer never produced a verdict" };
+  }
+  if (!verdict.reviewApproved) {
+    return { ...base, reason: "code review REJECTED" };
   }
   switch (mode) {
     case "yolo":
-      return { apply: true, requiresHuman: false, noop: false, reason: "yolo: auto-apply on approval" };
+      return { ...base, apply: true, reason: "yolo: auto-apply on approval" };
     case "manual":
-      return { apply: false, requiresHuman: true, noop: false, reason: "manual: awaiting human approval" };
+      return { ...base, requiresHuman: true, reason: "manual: awaiting human approval" };
     case "middle":
-      if (risk === "high") {
-        return { apply: false, requiresHuman: true, noop: false, reason: "middle: high risk \u2192 human approval" };
+      if (verdict.risk === "high") {
+        return { ...base, requiresHuman: true, reason: "middle: high risk \u2192 human approval" };
       }
-      return {
-        apply: true,
-        requiresHuman: false,
-        noop: false,
-        reason: `middle: ${risk ?? "unknown"} risk \u2192 auto-apply`
-      };
+      return { ...base, apply: true, reason: `middle: ${verdict.risk ?? "unknown"} risk \u2192 auto-apply` };
   }
 }
 function interpretWalk(tags) {
-  const decision = (tags.review_approved ?? // canonical
+  const rawDecision = (tags.review_approved ?? // canonical
   tags.review_decision ?? // legacy
   tags.decision ?? // legacy
   tags.approved ?? // legacy
   "").toLowerCase();
-  const reviewApproved = decision === "approve" || decision === "approved" || decision === "true";
+  const hasVerdict = rawDecision !== "";
+  const reviewApproved = rawDecision === "approve" || rawDecision === "approved" || rawDecision === "true";
   const rawRisk = (tags.risk_level ?? // canonical
   tags.risk ?? // legacy
   "").toLowerCase();
   const risk = rawRisk === "low" || rawRisk === "medium" || rawRisk === "high" ? rawRisk : void 0;
   const skipFlagging = (tags.skip_flagging ?? "").toLowerCase() === "true";
-  return { reviewApproved, risk, skipFlagging };
+  return { reviewApproved, hasVerdict, risk, skipFlagging };
 }
 
 // ../shared/dist/vegaClient.js
@@ -36594,9 +36589,9 @@ async function main() {
   if (walk2.skipped.length) console.log(`Skipped: ${walk2.skipped.join(", ")}`);
   const stallText = walk2.stalledAt ? describeStall(walk2.stalledAt) : "";
   if (stallText) console.log(`::warning::AutoFactory: ${stallText}`);
-  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk2.tags);
+  const verdict = interpretWalk(walk2.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
+  const decision = decideApproval(mode, verdict);
   console.log(`Approval [${mode}] \u2192 ${decision.reason}`);
   if (decision.requiresHuman) {
     console.log("\u23F8 Human approval required \u2014 not auto-applied.");
@@ -36604,8 +36599,10 @@ async function main() {
     console.log("\u2713 Changes approved and applied by the agents.");
   } else if (decision.noop) {
     console.log("\u2022 No flag needed \u2014 nothing to apply.");
+  } else if (decision.incomplete) {
+    console.log("\u26A0 Incomplete \u2014 the chain did not complete a code review (see the stall above).");
   } else {
-    console.log("\u2717 Not applied.");
+    console.log("\u2717 Not applied \u2014 code review REJECTED.");
   }
   const summary = [
     "### LaunchDarkly Auto-Factory \u2014 Phase 1",

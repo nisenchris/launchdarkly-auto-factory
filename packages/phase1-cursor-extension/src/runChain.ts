@@ -92,9 +92,9 @@ export async function runPhase1(opts: RunOptions): Promise<RunResult> {
     }
   });
 
-  const { reviewApproved, risk, skipFlagging } = interpretWalk(walk.tags);
+  const verdict = interpretWalk(walk.tags);
   const mode = getApprovalMode();
-  const decision = decideApproval(mode, reviewApproved, risk, skipFlagging);
+  const decision = decideApproval(mode, verdict);
 
   const result: RunResult = {
     runs: walk.runs,
