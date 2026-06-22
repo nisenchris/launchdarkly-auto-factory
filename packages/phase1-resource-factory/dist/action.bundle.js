@@ -36431,6 +36431,47 @@ function anthropicModelId(name) {
   return id.trim() || DEFAULT_MODEL;
 }
 
+// src/checkRun.ts
+var CHECK_NAME = "AutoFactory \u2014 Approval gate";
+async function postCheckRun(opts) {
+  const token = opts.token ?? process.env.GITHUB_TOKEN;
+  const repo = opts.repo ?? process.env.GITHUB_REPOSITORY;
+  const headSha = opts.headSha;
+  if (!token || !repo || !headSha) {
+    console.log("(check run skipped \u2014 missing token / repo / head SHA)");
+    return;
+  }
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/check-runs`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: CHECK_NAME,
+        head_sha: headSha,
+        status: "completed",
+        conclusion: opts.conclusion,
+        output: { title: opts.title, summary: opts.summary }
+      })
+    });
+    if (res.ok) {
+      console.log(`Posted check run '${CHECK_NAME}' [${opts.conclusion}].`);
+    } else if (res.status === 403) {
+      console.log(
+        `Check run failed: HTTP 403 \u2014 the workflow token likely lacks 'permissions: checks: write'.`
+      );
+    } else {
+      console.log(`Check run failed: HTTP ${res.status}`);
+    }
+  } catch (e) {
+    console.warn(`Check run error (non-fatal): ${e instanceof Error ? e.message : e}`);
+  }
+}
+
 // src/comment.ts
 var MARKER = "<!-- auto-factory-phase1 -->";
 async function postPrComment(body, target = {}) {
@@ -36535,6 +36576,7 @@ function assemblePrContext() {
         if (pr.number !== void 0) ctx.PR_NUMBER = String(pr.number);
         if (pr.title) ctx.PR_TITLE = pr.title;
         if (pr.body) ctx.PR_BODY = pr.body;
+        if (pr.head?.sha) ctx.HEAD_SHA = pr.head.sha;
       }
     } catch {
     }
@@ -36542,6 +36584,7 @@ function assemblePrContext() {
   ctx.PR_NUMBER = process.env.PR_NUMBER ?? ctx.PR_NUMBER;
   ctx.PR_TITLE = process.env.PR_TITLE ?? ctx.PR_TITLE;
   ctx.PR_BODY = process.env.PR_BODY ?? ctx.PR_BODY;
+  ctx.HEAD_SHA = process.env.PR_HEAD_SHA ?? ctx.HEAD_SHA;
   return ctx;
 }
 
@@ -36692,8 +36735,23 @@ async function main() {
     console.log(`::warning::AutoFactory: awaiting approval before '${node}'. Add the PR label '${label}' to proceed.`);
     const summary2 = buildGateComment(gatedSteps, approvedSteps, node);
     await postPrComment(summary2, { prNumber: context.PR_NUMBER, repo: context.REPO });
-    process.exitCode = 1;
+    await postCheckRun({
+      repo: context.REPO,
+      headSha: context.HEAD_SHA,
+      conclusion: "action_required",
+      title: `Approval required before ${node}`,
+      summary: `The AutoFactory chain paused before \`${node}\`. Nothing was created for this or later steps. Add the PR label \`${label}\` to approve; the chain resumes on the next run.`
+    });
     return;
+  }
+  if (gatedSteps.length) {
+    await postCheckRun({
+      repo: context.REPO,
+      headSha: context.HEAD_SHA,
+      conclusion: "success",
+      title: "Approval gates satisfied",
+      summary: `Approved step(s): ${[...approvedSteps].join(", ") || "(none gated this run)"}. The chain proceeded past all gates.`
+    });
   }
   const verdict = interpretWalk(walk2.tags);
   const mode = getApprovalMode();

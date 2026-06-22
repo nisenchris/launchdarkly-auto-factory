@@ -100,7 +100,8 @@ repo. Then set, in the app repo:
 | variable | `LD_APP_PROJECT_KEY` | your app project key |
 
 `GITHUB_TOKEN` is provided by Actions automatically. The workflow needs
-`contents: write` and `pull-requests: write` (already set in the template).
+`contents: write`, `pull-requests: write`, and `checks: write` (the last for the
+approval-gate check run; all already set in the template).
 
 ### 3. Open a pull request
 
@@ -137,10 +138,12 @@ node keys) pauses the chain **before** each listed agent until a human approves 
 of `approval_mode`, which governs the finished chain. Bootstrap provisions it **off** (serves
 `[]` = no gates, behavior unchanged); its on-variation serves `["autofactory-flag-implementer"]`
 (approve after research, before any flag is created), and you can edit the variation to gate
-other steps. In the **GitHub Action**, a gated run halts and comments which PR label to add
-(`af-approve:<nodeKey>`); adding it re-runs the chain past that gate (the workflow template
-listens for the `labeled` event, and approval persists across pushes). In the **Cursor
-extension**, a modal asks to approve or stop at each gate.
+other steps. In the **GitHub Action**, a gated run halts, comments which PR label to add
+(`af-approve:<nodeKey>`), and posts a distinct `action_required` check run (**AutoFactory —
+Approval gate**) rather than a red failure — so a pending gate reads as "needs a human," not
+as a pipeline error or a reviewer rejection. Adding the label re-runs the chain past that gate
+(the workflow template listens for the `labeled` event, and approval persists across pushes).
+In the **Cursor extension**, a modal asks to approve or stop at each gate.
 
 ## Phase 2 setup (Beacon)
 

@@ -31,6 +31,7 @@ import {
   resolveApprovalGates,
   walkGraph,
 } from "@auto-factory/shared";
+import { postCheckRun } from "./checkRun.js";
 import { postPrComment } from "./comment.js";
 import { approveLabel, ensureLabel, fetchApprovedSteps } from "./labels.js";
 import { type PrContext, assemblePrContext } from "./prContext.js";
@@ -250,9 +251,29 @@ async function main(): Promise<void> {
     console.log(`::warning::AutoFactory: awaiting approval before '${node}'. Add the PR label '${label}' to proceed.`);
     const summary = buildGateComment(gatedSteps, approvedSteps, node);
     await postPrComment(summary, { prNumber: context.PR_NUMBER, repo: context.REPO });
-    // Red check: action required. The chain is paused, not finished.
-    process.exitCode = 1;
+    // Carry the pause as a distinct `action_required` check run rather than a red
+    // failure, so it doesn't read as a pipeline error or a reviewer rejection
+    // (which also exit 1). The job itself exits 0 — the check run is the signal.
+    await postCheckRun({
+      repo: context.REPO,
+      headSha: context.HEAD_SHA,
+      conclusion: "action_required",
+      title: `Approval required before ${node}`,
+      summary: `The AutoFactory chain paused before \`${node}\`. Nothing was created for this or later steps. Add the PR label \`${label}\` to approve; the chain resumes on the next run.`,
+    });
     return;
+  }
+
+  // Gates were configured and all cleared: post a `success` check under the same
+  // name so it supersedes any earlier `action_required` on this head SHA.
+  if (gatedSteps.length) {
+    await postCheckRun({
+      repo: context.REPO,
+      headSha: context.HEAD_SHA,
+      conclusion: "success",
+      title: "Approval gates satisfied",
+      summary: `Approved step(s): ${[...approvedSteps].join(", ") || "(none gated this run)"}. The chain proceeded past all gates.`,
+    });
   }
 
   const verdict = interpretWalk(walk.tags);

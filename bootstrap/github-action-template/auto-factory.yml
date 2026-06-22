@@ -21,6 +21,7 @@ on:
 permissions:
   contents: write        # agents commit flag wiring, metrics, and tests to the PR branch
   pull-requests: write   # post the summary comment
+  checks: write          # post the approval-gate status as a check run
 
 jobs:
   auto-factory:
