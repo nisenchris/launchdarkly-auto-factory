@@ -7,9 +7,10 @@ runs the chain inside **Cursor's native agent**, so it uses Cursor's own model
 subscription. There is no Anthropic API key, which is the point: Cursor does not
 expose its models to extensions, but it does run them in its own agent.
 
-This is the **local, manual prototype** (Phase 1 of the plan): you run it by hand
-in Cursor on a target app repo and the edits land in your working tree for
-review. The automatic, git-triggered cloud Automation is a later phase.
+Run it two ways: **locally and by hand** (the `/autofactory` command — edits land
+in your working tree for review) or as a **cloud Automation** (a GitHub trigger
+fires a cloud sandbox that opens a PR). Both share the same artifacts; see
+[Run as a cloud Automation](#run-as-a-cloud-automation).
 
 It is kept separate from the extension and the TypeScript packages on purpose:
 these are just editor config artifacts (`.cursor/` rules, a command, an MCP
@@ -77,11 +78,40 @@ bootstrap/cursor-automation/
 4. Review the edits in Cursor's Source Control panel and commit them yourself.
    Nothing is committed or pushed for you.
 
+## Run as a cloud Automation
+
+The same artifacts also back a **cloud** Cursor Automation: a GitHub trigger
+fires a cloud sandbox that clones the repo, runs the chain, and opens a PR — no
+local Cursor session, no manual command. The chain, the `@autofactory` rule, and
+the LaunchDarkly-hosted instructions are identical; only the trigger, the
+secret/MCP wiring, and the output (a PR instead of working-tree edits) differ.
+
+Setup, once the `dot-cursor/` artifacts are in your target app repo on GitHub:
+
+1. **Environment.** `dot-cursor/environment.json` installs the app's deps so the
+   Tests phase can run. Adjust its `install` command to your repo's layout (the
+   shipped one matches the demo app: a Node `frontend/` + a Python `backend/`).
+2. **Secret.** Add `LD_API_KEY` (an `api-…` token with access to both projects)
+   in cursor.com/dashboard/cloud-agents → Secrets. It surfaces to the sandbox as
+   `$LD_API_KEY`, which both `create-metric.sh` and the MCP server use. Never
+   commit the token — this repo is public.
+3. **MCP.** Register the LaunchDarkly MCP server in the MCP dropdown at
+   cursor.com/agents (cloud agents configure MCP in the web, not from the repo's
+   `.cursor/mcp.json`), referencing the `LD_API_KEY` secret instead of an inline
+   key.
+4. **Automation.** Create an automation (cursor.com/automations or `/automate`)
+   with trigger *Pull request opened*, the prompt from
+   [`cloud-automation-prompt.md`](cloud-automation-prompt.md), and the
+   **LaunchDarkly MCP** + **Open PR** + **Comment on PR** tools enabled.
+
+The prompt carries a loop guard (skip if the change set already has a
+`.release-flags/` manifest) because the PR the automation opens would otherwise
+re-fire the "pull request opened" trigger.
+
 ## Limitations (prototype)
 
-- **Local + manual only.** The cloud Automation (automatic on push/PR, opening a
-  PR) is a later plan phase; the artifacts here are designed to be shared with
-  it.
+- **Two ways to run.** The local `/autofactory` command (above) leaves edits in
+  your working tree; the cloud Automation opens a PR. Both share these artifacts.
 - **Approval is advisory.** The reviewer's verdict is reported, not enforced
   (the edits are already in your tree). Hook-based gating is a later option.
 - **Metrics use a REST script** because LaunchDarkly's MCP server has no
