@@ -14,8 +14,7 @@ conventions** — it does not restate each phase's rules.
 ## Prerequisites (assume these are configured)
 
 - The **LaunchDarkly MCP server** is enabled in Cursor (provides `get-ai-config`,
-  `create-feature-flag`, flag/AI-config tools).
-- `LD_API_KEY` is exported in your shell (the metric-creation script uses it).
+  `create-feature-flag`, the metric-creation tool, and flag/AI-config tools).
 - Project keys:
   - **Factory project** (holds the agent instructions): `auto-factory-prototype`
   - **App project** (where flags + metrics are created): `autofactory-demo`
@@ -37,7 +36,7 @@ native equivalent:
 | Instruction says | Do this instead |
 |---|---|
 | `create_flag` / "create the flag" | Call the **LaunchDarkly MCP `create-feature-flag`** tool against the **app project**, using the flag convention below. |
-| `create_metric` / "create the metric" | Run `bash .cursor/autofactory/create-metric.sh …` (LD has no metric MCP tool). |
+| `create_metric` / "create the metric" | Call the **LaunchDarkly MCP metric-creation tool** against the **app project**, using the metric convention below. |
 | `write_file` / `edit_file` | Edit files natively. |
 | `run_tests` | Run the repo's test suite in the terminal (detect pytest / npm / go). |
 | `commit_and_push` | **Do nothing destructive** — leave all edits in the working tree for the developer to review and commit. Do not commit or push. |
@@ -81,23 +80,21 @@ behavior):
 - `tags`: `["auto-factory", "auto-generated"]`
 - Idempotent: if it already exists (409), reuse it.
 
-**Metric** (via the script) — one per category the change exposes:
+**Metric** (via the LaunchDarkly MCP metric-creation tool, app project) — one per
+category the change exposes. Create each as a `custom` metric whose event key
+matches the custom event name your `track()` call emits, with
+`randomizationUnits: ["user"]` and tags `["auto-factory", "auto-generated",
+"flag-<flag-key>"]`. Map the category to the metric shape:
 
-```
-bash .cursor/autofactory/create-metric.sh \
-  --project autofactory-demo \
-  --key <flag-key>-<category> \
-  --category error|latency|business \
-  --event <flag-key>-<signal> \
-  --randomization-unit user \
-  --flag <flag-key>
-```
+| Category | Numeric? | Success criteria | Extra |
+|---|---|---|---|
+| `error` | no | `LowerThanBaseline` | — |
+| `latency` | yes | `LowerThanBaseline` | `unit: "ms"`, `unitAggregationType: "average"` |
+| `business` | no | `HigherThanBaseline` | — |
 
-The script maps category → LD shape (error/latency = lower-is-better; business =
-higher-is-better; latency = numeric ms) and tags the metric `auto-factory`,
-`auto-generated`, `flag-<flag-key>`. The `--event` must match the custom event
-name your `track()` call emits. Metric key convention: `<flag-key>-<category>`
-(e.g. `enable-x-error-rate`, `enable-x-latency`, `enable-x-success-rate`).
+Metric key convention: `<flag-key>-<category>` (e.g. `enable-x-error-rate`,
+`enable-x-latency`, `enable-x-success-rate`). Idempotent: if the metric already
+exists (409), reuse it.
 
 **Release manifest** — write `.release-flags/<change-id>.json` so Phase 2 can
 discover it:
