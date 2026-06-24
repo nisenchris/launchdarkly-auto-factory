@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoFactory — Cursor Cloud Automation Overview</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --node: #1f2630;
+    --node-border: #30363d;
+    --accent1: #a371f7;   /* Phase 1 — Cursor native agent */
+    --accent2: #3fb950;   /* Phase 2 — Beacon */
+    --rollback: #f85149;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --tip-bg: #21262d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2.5rem 1.5rem 4rem;
+    background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { max-width: 1200px; margin: 0 auto 2rem; }
+  h1 { margin: 0 0 .25rem; font-size: 1.6rem; }
+  header p { color: var(--muted); margin: 0 0 .5rem; max-width: 62rem; }
+
+  .phase { max-width: 1200px; margin: 0 auto 2.25rem; background: var(--panel);
+           border: 1px solid var(--node-border); border-radius: 12px; padding: 1.25rem 1.5rem 1.75rem; }
+  .phase h2 { margin: 0 0 .15rem; font-size: 1.05rem; letter-spacing: .02em; }
+  .phase .sub { color: var(--muted); font-size: .85rem; margin: 0 0 1.1rem; }
+  .phase.p1 h2 { color: var(--accent1); }
+  .phase.p2 h2 { color: var(--accent2); }
+
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: .4rem .25rem; }
+
+  .node {
+    position: relative; flex: 1 1 150px; min-width: 138px; max-width: 215px;
+    background: var(--node); border: 1px solid var(--node-border); border-radius: 10px;
+    padding: .7rem .8rem .75rem; cursor: help;
+    transition: border-color .15s, transform .15s;
+  }
+  .node:hover { z-index: 100; }
+  .p1 .node:hover { border-color: var(--accent1); transform: translateY(-2px); }
+  .p2 .node:hover { border-color: var(--accent2); transform: translateY(-2px); }
+  .node.rollback { border-style: dashed; }
+  .node.rollback:hover { border-color: var(--rollback); }
+  .node.shortcircuit { border-style: dashed; }
+  .node.shortcircuit:hover { border-color: var(--accent1); }
+
+  .node .step { font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .node .title { font-weight: 600; font-size: .92rem; margin-top: .1rem; }
+  .node .hint { font-size: .78rem; color: var(--muted); margin-top: .25rem; }
+
+  .arrow { align-self: center; color: var(--muted); font-size: 1.1rem; padding: 0 .1rem; user-select: none; }
+
+  .tip {
+    visibility: hidden; opacity: 0; transition: opacity .15s ease .05s;
+    position: absolute; z-index: 110; left: 50%; transform: translateX(-50%);
+    top: calc(100% + 10px); width: 340px;
+    background: var(--tip-bg); border: 1px solid var(--node-border); border-radius: 10px;
+    padding: .8rem .95rem; font-size: .82rem; color: var(--text);
+    box-shadow: 0 10px 30px rgba(0,0,0,.55);
+  }
+  .tip::before {
+    content: ""; position: absolute; top: -6px; left: 50%; transform: translateX(-50%) rotate(45deg);
+    width: 10px; height: 10px; background: var(--tip-bg);
+    border-left: 1px solid var(--node-border); border-top: 1px solid var(--node-border);
+  }
+  .node:hover .tip { visibility: visible; opacity: 1; }
+  .flow .node:nth-child(-n+3) .tip { left: 0; transform: none; }
+  .flow .node:nth-child(-n+3) .tip::before { left: 36px; }
+  .tip ul { margin: .35rem 0 0; padding-left: 1.05rem; }
+  .tip li { margin: .18rem 0; }
+  .tip .k { color: var(--accent1); font-family: ui-monospace, monospace; font-size: .78rem; }
+  .p2 .tip .k { color: var(--accent2); }
+
+  .legend { max-width: 1200px; margin: 0 auto; color: var(--muted); font-size: .8rem; }
+  .legend span { margin-right: 1.25rem; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: .35rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AutoFactory pipeline — Cursor cloud automation</h1>
+  <p>The same Phase 1 chain (research &rarr; flag &rarr; metrics &rarr; tests &rarr; review),
+     run as a <b>Cursor cloud Automation</b> instead of a GitHub Action. A PR-opened
+     event fires a fresh cloud sandbox; Cursor's own agent runs the chain, fetching
+     each agent's instructions from LaunchDarkly and using LaunchDarkly MCP + native
+     tools. It produces the same release manifest, so Phase 2 (Beacon) is unchanged.
+     Hover a node for the mechanics.</p>
+</header>
+
+<section class="phase p1">
+  <h2>Phase 1: PR &rarr; release resources (Cursor cloud agent)</h2>
+  <p class="sub">A Cursor Automation on the "Pull request opened" trigger. Five agents, instructions resolved from LaunchDarkly AI Configs at run time, sequenced by a committed Cursor rule.</p>
+  <div class="flow">
+
+    <div class="node">
+      <div class="step">Step 1</div>
+      <div class="title">Developer opens a PR</div>
+      <div class="hint">unflagged feature change</div>
+      <div class="tip">The PR contains the feature change with no flag wiring.
+        Classification, flag creation, code wiring, metric instrumentation, and
+        tests are produced by the agent and delivered as a separate PR.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 2</div>
+      <div class="title">Cursor Automation fires</div>
+      <div class="hint">PR opened &rarr; cloud sandbox</div>
+      <div class="tip">A Cursor Automation triggered on <span class="k">Pull request opened</span>
+        spins up a fresh cloud sandbox and clones the repo.
+        <ul>
+          <li>The committed <span class="k">.cursor/</span> artifacts (the rule + command) ride along in the clone.</li>
+          <li><span class="k">.cursor/environment.json</span> runs the install command so the test suite can run later.</li>
+          <li><b>Loop guard:</b> if the change set already contains a <span class="k">.release-flags/</span> manifest, the run stops &mdash; the automation's own PR would otherwise re-fire this trigger.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 3</div>
+      <div class="title">Agent reads the rule</div>
+      <div class="hint">sequencing + tool translation</div>
+      <div class="tip">Cursor's native agent loads <span class="k">.cursor/rules/autofactory.mdc</span>,
+        which owns the chain order, the LaunchDarkly conventions, and a tool-translation table.
+        <ul>
+          <li>Prompts stay config: each phase's instructions are fetched from LaunchDarkly via the <span class="k">get-ai-config</span> MCP tool at run time.</li>
+          <li>Tool translation maps the instructions' tool names to native + MCP equivalents (e.g. <span class="k">create_flag</span> &rarr; MCP <span class="k">create-feature-flag</span>).</li>
+          <li>Runs in one continuous context &mdash; no graph traversal; the rule's prose is the routing.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 4</div>
+      <div class="title">Research &amp; Planner</div>
+      <div class="hint">read-only analysis</div>
+      <div class="tip">Config <span class="k">autofactory-research-planner</span>. Native file reads, grep, <span class="k">git diff</span>; no writes.
+        <ul>
+          <li>Classifies <span class="k">pr_type</span>, <span class="k">risk_level</span>, <span class="k">change_scope</span>, user-facing impact, and the repo's existing flag/test/telemetry patterns.</li>
+          <li><b>Short-circuit:</b> if the change is config-only, docs, a dependency bump, infra, or test-only, the agent stops here, comments "no flag needed," and opens no PR.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node shortcircuit">
+      <div class="step">No flag</div>
+      <div class="title">Stop &amp; comment</div>
+      <div class="hint">no PR opened</div>
+      <div class="tip">When Research concludes the change needs no flag, the chain ends.
+        The agent posts a short comment on the triggering PR saying no flag was
+        needed and does not open a PR. Downstream agents never run.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 5</div>
+      <div class="title">Flag Implementer</div>
+      <div class="hint">creates the flag, wires the code</div>
+      <div class="tip">Config <span class="k">autofactory-flag-implementer</span>.
+        <ul>
+          <li>Creates a boolean flag via the MCP <span class="k">create-feature-flag</span> tool in the <b>app</b> project, targeting off in all environments.</li>
+          <li>Wraps the new behavior in flag evaluation; the control path (flag off) keeps prior behavior.</li>
+          <li>Idempotent: an existing flag (409) is reused.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 6</div>
+      <div class="title">Metrics Author</div>
+      <div class="hint">creates guarded-release metrics</div>
+      <div class="tip">Config <span class="k">autofactory-metrics-author</span>. Metrics are created via the LaunchDarkly MCP metric tool &mdash; no REST script.
+        <ul>
+          <li>Categories: error (occurrence, lower is better), latency (numeric ms, lower is better), business (occurrence, higher is better).</li>
+          <li>Adds <span class="k">track()</span> calls on the flagged path; each metric's <span class="k">eventKey</span> equals the tracked event name. Key convention <span class="k">&lt;flag&gt;-&lt;category&gt;</span>.</li>
+          <li>Writes the release manifest <span class="k">.release-flags/&lt;id&gt;.json</span> with <span class="k">metricKeys</span> + <span class="k">randomizationUnit</span>, which Phase 2 reads.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 7</div>
+      <div class="title">Flag Testing</div>
+      <div class="hint">flag-on and flag-off tests</div>
+      <div class="tip">Config <span class="k">autofactory-flag-testing</span>.
+        <ul>
+          <li>Writes paired tests per flagged path: flag on asserts the new behavior, flag off asserts the prior behavior.</li>
+          <li>Uses the repo's existing test framework and runs the suite in the sandbox terminal, fixing failures.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 8</div>
+      <div class="title">Code Reviewer</div>
+      <div class="hint">APPROVE / REJECT + risk_level</div>
+      <div class="tip">Config <span class="k">autofactory-code-reviewer</span>. Read-only review of the full change set.
+        <ul>
+          <li>Checks logic, error handling, control-path preservation, test quality, and that <span class="k">track()</span> event names match each metric's <span class="k">event_key</span>.</li>
+          <li>Produces <span class="k">review_approved</span> + <span class="k">risk_level</span>. Advisory here &mdash; the PR itself is the human gate.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 9</div>
+      <div class="title">Cursor opens a PR</div>
+      <div class="hint">new branch + verdict comment</div>
+      <div class="tip">The agent commits its work to its own <span class="k">cursor/&hellip;</span> branch and Cursor opens a <b>new</b> PR (not the triggering one).
+        <ul>
+          <li>It comments on the triggering PR with the flag key, metric keys, manifest path, and the review verdict (LaunchDarkly links included).</li>
+          <li>Open question: whether an automation can instead push to the triggering PR's branch or stack onto it &mdash; today it opens a parallel PR.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 10</div>
+      <div class="title">Human merges</div>
+      <div class="hint">flag remains off</div>
+      <div class="tip">A human reviews and merges the AutoFactory PR. The flag is off in
+        every environment, so the deploy serves the control path. The release
+        manifest is now on the default branch where Phase 2 discovery can see it.</div>
+    </div>
+
+  </div>
+</section>
+
+<section class="phase p2">
+  <h2>Phase 2: deploy &rarr; guarded release (Beacon)</h2>
+  <p class="sub">Identical regardless of which Phase 1 front end produced the manifest. HTTP service hosted separately; receives deploy notifications, diffs release manifests, triggers and monitors releases via the LaunchDarkly API.</p>
+  <div class="flow">
+
+    <div class="node">
+      <div class="step">Step 11</div>
+      <div class="title">CD deploys the services</div>
+      <div class="hint">existing deploy pipeline</div>
+      <div class="tip">The merge deploys through the team's existing CD (Railway in the
+        demo, via its GitHub integration). AutoFactory does not run the deploy; it
+        only consumes a notification that a deploy succeeded.</div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 12</div>
+      <div class="title">Deploy webhook &rarr; Beacon</div>
+      <div class="hint">POST {service, sha} + secret</div>
+      <div class="tip">Generic endpoint <span class="k">/flag-releases</span> accepts
+        <span class="k">{service, sha, previousSha?, environment?}</span>, authenticated by a shared
+        secret in a header or query parameter.
+        <ul>
+          <li>Provider adapters translate native payloads to the same handler. The Railway adapter reads <span class="k">details.status</span>, <span class="k">details.commitHash</span>, <span class="k">resource.service.name</span>.</li>
+          <li>Only success statuses proceed. Other deploy statuses return 200 with <span class="k">ignored</span>.</li>
+          <li>Providers retry non-2xx deliveries, so all handling is idempotent.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 13</div>
+      <div class="title">SHA diff &rarr; discovery</div>
+      <div class="hint">previousSha resolution + manifest diff</div>
+      <div class="tip"><span class="k">.release-flags/</span> is listed at the deployed SHA and at the
+        previous SHA (GitHub contents API). Manifests present only at the new SHA are released.
+        <ul>
+          <li>previousSha resolution order: explicit field in the notification, then Beacon's deploy-state store (last SHA per service@environment), else none. With none, all current manifests are treated as new (first deploy).</li>
+          <li>The store keeps <span class="k">last</span> and <span class="k">prior</span> SHAs. Re-delivery of the current SHA re-diffs <span class="k">prior..sha</span> instead of the empty <span class="k">sha..sha</span>.</li>
+          <li>No dependency on the CD system reporting its own deploy history.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 14</div>
+      <div class="title">Scope &amp; fullstack check</div>
+      <div class="hint">frontend / backend / fullstack</div>
+      <div class="tip">Each manifest carries a scope; each service registers a side
+        (<span class="k">config/services.yaml</span>).
+        <ul>
+          <li>A notification from the wrong side skips the flag; the right side's notification releases it.</li>
+          <li>Fullstack: Beacon reads the other side's status endpoint for its deployed SHA and checks that SHA contains the same manifest file. If absent, the flag waits and is re-evaluated when the other service's notification arrives.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 15</div>
+      <div class="title">Release trigger</div>
+      <div class="hint">method and stages by precedence</div>
+      <div class="tip">
+        <ul>
+          <li>Method precedence: manifest <span class="k">releaseOverrides.releaseMethod</span>, then the flag's configured release policy, else guarded when <span class="k">metricKeys</span> exist, progressive otherwise.</li>
+          <li>Stage precedence: overrides, then policy, then defaults (guarded 20%/50%, progressive 20/50/100%).</li>
+          <li>Guarded stage allocations are limited to 50% by the API; the release serves 100% after the final stage completes.</li>
+          <li>Flags are off at this point, so the semantic patch combines <span class="k">turnFlagOn</span> and <span class="k">startAutomatedRelease</span> in one request.</li>
+          <li>A flag with an in-progress release reports <span class="k">already_running</span> instead of re-triggering.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 16</div>
+      <div class="title">Guarded release runs</div>
+      <div class="hint">staged rollout, metric comparison</div>
+      <div class="tip">LaunchDarkly shifts traffic per stage while the Phase 1 metrics
+        compare treatment against control on live traffic.
+        <ul>
+          <li><span class="k">autoRollback</span> is set per metric at trigger time.</li>
+          <li>The randomization unit from the manifest keeps measurement aligned with the rollout.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node">
+      <div class="step">Step 17</div>
+      <div class="title">Beacon monitors</div>
+      <div class="hint">poll to terminal state</div>
+      <div class="tip">Beacon resolves the release id (per-flag automated-releases list,
+        filtered to <span class="k">in_progress</span>) and polls until a terminal state:
+        <ul>
+          <li><span class="k">completed</span>: rolled out to 100%.</li>
+          <li><span class="k">reverted</span>: a guardrail metric regressed; traffic returned to control.</li>
+          <li><span class="k">monitoring_stopped</span>: a human intervened.</li>
+          <li>Polling runs detached from the webhook request. A monitoring failure does not affect the release, which runs server-side.</li>
+        </ul></div>
+    </div>
+    <div class="arrow">→</div>
+
+    <div class="node rollback">
+      <div class="step">On regression</div>
+      <div class="title">Auto-rollback</div>
+      <div class="hint">flag reverts to control</div>
+      <div class="tip">A killswitch metric regression reverts the release: traffic
+        returns to the control variation by flag change, with no deploy. Beacon
+        records the <span class="k">reverted</span> terminal state.</div>
+    </div>
+
+  </div>
+</section>
+
+<div class="legend">
+  <span><span class="dot" style="background:var(--accent1)"></span>Phase 1: Cursor cloud agent chain</span>
+  <span><span class="dot" style="background:var(--accent2)"></span>Phase 2: Beacon release orchestration</span>
+  <span><span class="dot" style="background:var(--rollback)"></span>automated rollback path</span>
+</div>
+
+</body>
+</html>
