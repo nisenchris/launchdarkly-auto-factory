@@ -36207,7 +36207,12 @@ var LdResourceWriter = class {
         { value: false, name: "Control" }
       ],
       // On = treatment (index 0); Off = control (index 1) — flag-off preserves existing behavior.
-      defaults: { onVariation: 0, offVariation: 1 }
+      defaults: { onVariation: 0, offVariation: 1 },
+      // Expose to client-side SDKs by default. Without this, browser/frontend apps
+      // never receive the flag (clientSideAvailability.usingEnvironmentId defaults to
+      // false on API-created flags) and useFlags() returns undefined regardless of
+      // the on/off state. The factory targets frontend apps, so this must be true.
+      clientSideAvailability: { usingEnvironmentId: true, usingMobileKey: false }
     };
     const res = await this.ld.createFlag(body);
     const alreadyExists = res.status === 409;
