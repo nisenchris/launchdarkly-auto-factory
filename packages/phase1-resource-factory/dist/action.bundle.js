@@ -35799,9 +35799,13 @@ var CREATE_FLAG_TOOL = {
       key: { type: "string", description: "Flag key, e.g. enable-farewell (lowercase, hyphenated)" },
       name: { type: "string", description: "Human-readable flag name" },
       description: { type: "string", description: "What the flag gates" },
+      client_side: {
+        type: "boolean",
+        description: "Whether a CLIENT-SIDE SDK evaluates this flag. Set true when the flag is read by browser/mobile code \u2014 e.g. a JS/React client SDK via useFlags()/useLDClient(), or any frontend bundle \u2014 so the flag is exposed via the client-side ID and the browser actually receives it. Set false for SERVER-ONLY flags (Node/Go/Python/Ruby/etc. backends); server flags MUST NOT be exposed to client SDKs. Decide from where this PR's code actually evaluates the flag."
+      },
       tags: { type: "array", items: { type: "string" }, description: "Extra tags (auto-factory tags are added automatically)" }
     },
-    required: ["key"]
+    required: ["key", "client_side"]
   }
 };
 var CREATE_METRIC_TOOL = {
@@ -35996,8 +36000,15 @@ var SandboxToolExecutor = class {
   async createFlag(input) {
     if (!this.writer)
       return { content: "create_flag is not available", isError: true };
+    if (typeof input.client_side !== "boolean") {
+      return {
+        content: "create_flag requires client_side (boolean): true if a client-side/browser/mobile SDK reads this flag, false for server-only flags. Decide from where the flag is evaluated in this PR.",
+        isError: true
+      };
+    }
     const result = await this.writer.createBooleanFlag({
       key: String(input.key ?? ""),
+      clientSide: input.client_side,
       ...input.name ? { name: String(input.name) } : {},
       ...input.description ? { description: String(input.description) } : {},
       ...Array.isArray(input.tags) ? { tags: input.tags.map(String) } : {}
@@ -36208,11 +36219,13 @@ var LdResourceWriter = class {
       ],
       // On = treatment (index 0); Off = control (index 1) — flag-off preserves existing behavior.
       defaults: { onVariation: 0, offVariation: 1 },
-      // Expose to client-side SDKs by default. Without this, browser/frontend apps
-      // never receive the flag (clientSideAvailability.usingEnvironmentId defaults to
-      // false on API-created flags) and useFlags() returns undefined regardless of
-      // the on/off state. The factory targets frontend apps, so this must be true.
-      clientSideAvailability: { usingEnvironmentId: true, usingMobileKey: false }
+      // Expose to client-side SDKs ONLY when the flag is evaluated client-side
+      // (browser/mobile). API-created flags default to usingEnvironmentId=false, which
+      // means a frontend useFlags() never receives the flag (returns undefined) no
+      // matter the on/off state — so client-side flags MUST set this true. Server-only
+      // flags stay false so they are never exposed to client SDKs. The caller (agent)
+      // decides per-flag from where the flag is actually evaluated.
+      clientSideAvailability: { usingEnvironmentId: args.clientSide === true, usingMobileKey: false }
     };
     const res = await this.ld.createFlag(body);
     const alreadyExists = res.status === 409;

@@ -18,6 +18,14 @@ export interface CreateFlagArgs {
   description?: string;
   /** Extra tags, merged with the standard auto-factory tags. */
   tags?: string[];
+  /**
+   * Whether a client-side SDK (browser/mobile) evaluates this flag. Controls
+   * `clientSideAvailability.usingEnvironmentId`: true exposes the flag to the
+   * client-side ID so a browser/mobile SDK receives it; false keeps it server-only.
+   * Server flags MUST stay false so they are never exposed to client SDKs.
+   * Defaults to false (server-safe) when omitted.
+   */
+  clientSide?: boolean;
 }
 
 /**
@@ -81,11 +89,13 @@ export class LdResourceWriter {
       ],
       // On = treatment (index 0); Off = control (index 1) — flag-off preserves existing behavior.
       defaults: { onVariation: 0, offVariation: 1 },
-      // Expose to client-side SDKs by default. Without this, browser/frontend apps
-      // never receive the flag (clientSideAvailability.usingEnvironmentId defaults to
-      // false on API-created flags) and useFlags() returns undefined regardless of
-      // the on/off state. The factory targets frontend apps, so this must be true.
-      clientSideAvailability: { usingEnvironmentId: true, usingMobileKey: false },
+      // Expose to client-side SDKs ONLY when the flag is evaluated client-side
+      // (browser/mobile). API-created flags default to usingEnvironmentId=false, which
+      // means a frontend useFlags() never receives the flag (returns undefined) no
+      // matter the on/off state — so client-side flags MUST set this true. Server-only
+      // flags stay false so they are never exposed to client SDKs. The caller (agent)
+      // decides per-flag from where the flag is actually evaluated.
+      clientSideAvailability: { usingEnvironmentId: args.clientSide === true, usingMobileKey: false },
     };
     const res = await this.ld.createFlag(body);
     const alreadyExists = res.status === 409;
