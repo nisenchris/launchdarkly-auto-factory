@@ -57,3 +57,10 @@ services:
     repo: ttotenberg-ld/launchdarkly-autofactory-application
     statusUrl: http://togglemart-users.railway.internal:8083/api/status
     statusShaField: version
+
+  # --- Kika v2: Nationwise on AWS Amplify ---
+  nationwise-frontend:
+    side: frontend
+    repo: nisenchris/kika-factory-app
+    statusUrl: https://main.d3m1xdb0z0whp7.amplifyapp.com/api/status
+    statusShaField: version
