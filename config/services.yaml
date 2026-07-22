@@ -62,5 +62,5 @@ services:
   nationwise-frontend:
     side: frontend
     repo: nisenchris/kika-factory-app
-    statusUrl: https://main.d3m1xdb0z0whp7.amplifyapp.com/api/status
+    statusUrl: https://main.d3m1xdb0z0whp7.amplifyapp.com/api/status.json
     statusShaField: version
