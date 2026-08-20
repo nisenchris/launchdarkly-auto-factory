@@ -5,6 +5,21 @@
   "rootConfigKey": "autofactory-research-planner",
   "edges": [
     {
+      "key": "edge-autofactory-research-planner-autofactory-code-reviewer",
+      "sourceConfig": "autofactory-research-planner",
+      "targetConfig": "autofactory-code-reviewer",
+      "handoff": {
+        "capabilities": [
+          "read_docs"
+        ],
+        "max_turns": 30,
+        "request_type": "Fix",
+        "require_tags": {
+          "super_fast": "true"
+        }
+      }
+    },
+    {
       "key": "edge-autofactory-research-planner-autofactory-manifest-steward",
       "sourceConfig": "autofactory-research-planner",
       "targetConfig": "autofactory-manifest-steward",
