@@ -39522,7 +39522,6 @@ function mapModelParameters(ldParams, modelDef) {
 }
 
 // ../shared/dist/cursor/cursorAgentRunner.js
-var CURSOR_DENIED_BUILTINS = ["shell", "edit", "delete", "task", "webFetch", "webSearch"];
 var DEFAULT_FALLBACK_MODEL = "auto";
 var cursorSdkPromise;
 function loadCursorSdk() {
@@ -39656,7 +39655,8 @@ ${req.prompt}`;
         // routing tags. The agent's behavior must come from the LD AI config alone
         // (parity with the Anthropic path), so we load no ambient settings.
         local: { cwd: this.opts.sandboxRoot, customTools, settingSources: [] },
-        disallowedTools: CURSOR_DENIED_BUILTINS,
+        tools: ["mcp"],
+        // allowlist: only the factory's own custom tools, fail closed
         mode: "agent"
       });
       const run = await agent.send(message);
@@ -39987,7 +39987,8 @@ Respond with ONLY a single JSON object matching this schema (no prose, no code f
     const result = await Agent.prompt(message, {
       ...apiKey ? { apiKey } : {},
       model: { id: match.id },
-      // Hermetic + toolless-by-intent: judges only read the prompt.
+      // Hermetic and toolless: judges only read the prompt.
+      tools: [],
       local: { cwd: opts.cwd ?? process.cwd(), settingSources: [] },
       mode: "agent"
     });

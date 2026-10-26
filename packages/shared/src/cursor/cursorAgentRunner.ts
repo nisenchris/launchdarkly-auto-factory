@@ -275,7 +275,7 @@ export class CursorAgentRunner implements AgentRunner {
         // routing tags. The agent's behavior must come from the LD AI config alone
         // (parity with the Anthropic path), so we load no ambient settings.
         local: { cwd: this.opts.sandboxRoot, customTools, settingSources: [] },
-        disallowedTools: CURSOR_DENIED_BUILTINS,
+        tools: ["mcp"], // allowlist: only the factory's own custom tools, fail closed
         mode: "agent",
       });
 

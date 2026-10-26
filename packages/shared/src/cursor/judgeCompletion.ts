@@ -67,7 +67,8 @@ export function createCursorJudgeCompletion(opts: CursorJudgeCompletionOptions =
     const result = await Agent.prompt(message, {
       ...(apiKey ? { apiKey } : {}),
       model: { id: match.id },
-      // Hermetic + toolless-by-intent: judges only read the prompt.
+      // Hermetic and toolless: judges only read the prompt.
+      tools: [],
       local: { cwd: opts.cwd ?? process.cwd(), settingSources: [] },
       mode: "agent",
     });
