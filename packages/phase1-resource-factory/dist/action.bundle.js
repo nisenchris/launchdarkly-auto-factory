@@ -39658,11 +39658,18 @@ ${req.prompt}`;
         mode: "agent"
       });
       const run = await agent.send(message);
+      for await (const event of run.stream()) {
+        if (event.type === "tool_call" && event.status !== "completed") {
+          console.log(`[cursor] ${req.configKey} > ${event.name}${event.status === "error" ? " (error)" : ""}`);
+        }
+      }
       const result = await run.wait();
       finalText = result.result ?? "";
       usage = result.usage;
-      if (result.status !== "finished")
+      if (result.status !== "finished") {
         status = result.status === "cancelled" ? "cancelled" : "failed";
+        console.warn(`[node] ${req.configKey} cursor run ${result.status}: ${result.error?.message ?? "no error message"}`);
+      }
       if (status === "completed") {
         const missing = missingRequiredTags(req.configKey, executor.tags);
         if (missing.length > 0) {
