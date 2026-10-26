@@ -270,10 +270,20 @@ export class CursorAgentRunner implements AgentRunner {
       });
 
       const run = await agent.send(message);
+      // Stream the run so every Cursor tool call shows up live in the Action log
+      // (custom tools appear as "mcp"), then collect the final result.
+      for await (const event of run.stream()) {
+        if (event.type === "tool_call" && event.status !== "completed") {
+          console.log(`[cursor] ${req.configKey} > ${event.name}${event.status === "error" ? " (error)" : ""}`);
+        }
+      }
       const result = await run.wait();
       finalText = result.result ?? "";
       usage = result.usage;
-      if (result.status !== "finished") status = result.status === "cancelled" ? "cancelled" : "failed";
+      if (result.status !== "finished") {
+        status = result.status === "cancelled" ? "cancelled" : "failed";
+        console.warn(`[node] ${req.configKey} cursor run ${result.status}: ${result.error?.message ?? "no error message"}`);
+      }
 
       // Safety net: if the agent finished without recording the routing tag(s)
       // its node owns, send one more turn forcing a `tag_conversation` call, so
