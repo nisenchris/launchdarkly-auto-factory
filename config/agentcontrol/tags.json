@@ -166,6 +166,20 @@
         "handoffVerifier"
       ],
       "description": "true when a Sentry-backed shared LD metric (sentry-errors*) was attached as the error killswitch. The handoff verifier checks that launchdarklyContext appears in the checkout (ADR 0014)."
+    },
+    "super_fast": {
+      "producedBy": "autofactory-research-planner",
+      "production": "llm",
+      "role": "routing",
+      "edges": [
+        {
+          "from": "autofactory-research-planner",
+          "to": "autofactory-code-reviewer",
+          "kind": "require_tags"
+        }
+      ],
+      "readBy": [],
+      "description": "Kika demo shortcut: \"true\" only from the planner's demo-super-express variation. Routes planner -> reviewer directly, skipping the flag steps."
     }
   }
 }

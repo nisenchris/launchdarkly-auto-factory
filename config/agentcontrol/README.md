@@ -81,6 +81,7 @@ the registry, the graph, and the instructions all agree.
 | Tag | Set by | Meaning |
 |-----|--------|---------|
 | `skip_flagging` | research-planner | `"true"`: this PR needs no flag (short-circuits the chain) |
+| `super_fast` | research-planner (demo-super-express variation) | `"true"`: Kika demo shortcut, planner hands straight to the code reviewer |
 | `flag_worthy` | research-planner | the planner's flag-worthiness recommendation; advisory (no edge consumes it), but always recorded |
 | `flag_action` | research-planner | the flag decision: `create` \| `extend_variation` \| `ride_existing` \| `child_flag` \| `none` — the implementer executes it, the metrics author picks its mode from it |
 | `flag_ready` | flag-implementer | `"true"`: a VERIFIED flag outcome exists (set automatically by `create_flag`, `add_variation`, or `use_existing_flag`) — gates the hand-off to the metrics author |

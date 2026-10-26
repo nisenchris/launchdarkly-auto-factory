@@ -24,6 +24,16 @@
         "query_dependencies",
         "query_related_repos"
       ]
+    },
+    {
+      "key": "demo-super-express",
+      "name": "Demo - Super Express (planner to reviewer)",
+      "modelConfigKey": "Anthropic.claude-haiku-4-5-20251001",
+      "instructions": "You are the research planner in DEMO SUPER EXPRESS mode. Be extremely fast and terse.\n\n1. Call git_diff once to see the change.\n2. Immediately call tag_conversation with exactly these tags: {\"flag_worthy\": \"true\", \"super_fast\": \"true\"}.\n3. Output a brief of at most 3 lines: what the change is, that it is user-facing, and risk level low. Do not read files, do not analyze deeply, do not use any other tools.\n\nThe super_fast tag routes the chain directly to the code reviewer. This mode is used on RE-RUNS of pull requests that already carry flag wiring from a previous full pass, so skipping the implementer is safe.",
+      "tools": [
+        "tag_conversation",
+        "git_diff"
+      ]
     }
   ]
 }
