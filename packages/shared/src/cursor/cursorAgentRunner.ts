@@ -46,6 +46,15 @@ import {
 import { startAiSpan } from "../observability.js";
 import { mapModelParameters, mapToCursorModel } from "./cursorModel.js";
 
+/**
+ * Cursor built-in tools no factory agent may use. Without this, a local Cursor agent
+ * carries its own shell and file editor next to our customTools, so it can edit files
+ * outside the capability grant or commit and push on its own (a 2026-07-20 run did).
+ * Agents edit through the factory's guarded edit_file/write_file tools instead.
+ * Never add "mcp": that group also carries our customTools.
+ */
+export const CURSOR_DENIED_BUILTINS = ["shell", "edit", "delete", "task", "webFetch", "webSearch"];
+
 /** Cursor model used when the LD-configured model can't be mapped to the catalog. */
 const DEFAULT_FALLBACK_MODEL = "auto";
 
@@ -266,6 +275,7 @@ export class CursorAgentRunner implements AgentRunner {
         // routing tags. The agent's behavior must come from the LD AI config alone
         // (parity with the Anthropic path), so we load no ambient settings.
         local: { cwd: this.opts.sandboxRoot, customTools, settingSources: [] },
+        disallowedTools: CURSOR_DENIED_BUILTINS,
         mode: "agent",
       });
 

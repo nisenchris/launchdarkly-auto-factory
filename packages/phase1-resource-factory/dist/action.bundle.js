@@ -39522,6 +39522,7 @@ function mapModelParameters(ldParams, modelDef) {
 }
 
 // ../shared/dist/cursor/cursorAgentRunner.js
+var CURSOR_DENIED_BUILTINS = ["shell", "edit", "delete", "task", "webFetch", "webSearch"];
 var DEFAULT_FALLBACK_MODEL = "auto";
 var cursorSdkPromise;
 function loadCursorSdk() {
@@ -39655,6 +39656,7 @@ ${req.prompt}`;
         // routing tags. The agent's behavior must come from the LD AI config alone
         // (parity with the Anthropic path), so we load no ambient settings.
         local: { cwd: this.opts.sandboxRoot, customTools, settingSources: [] },
+        disallowedTools: CURSOR_DENIED_BUILTINS,
         mode: "agent"
       });
       const run = await agent.send(message);
