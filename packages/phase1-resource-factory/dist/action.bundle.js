@@ -39660,7 +39660,9 @@ ${req.prompt}`;
       const run = await agent.send(message);
       for await (const event of run.stream()) {
         if (event.type === "tool_call" && event.status !== "completed") {
-          console.log(`[cursor] ${req.configKey} > ${event.name}${event.status === "error" ? " (error)" : ""}`);
+          const command = event.name === "shell" ? event.args?.command : void 0;
+          const detail = typeof command === "string" ? `: ${command.slice(0, 160)}` : "";
+          console.log(`[cursor] ${req.configKey} > ${event.name}${detail}${event.status === "error" ? " (error)" : ""}`);
         }
       }
       const result = await run.wait();

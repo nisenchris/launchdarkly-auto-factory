@@ -274,7 +274,10 @@ export class CursorAgentRunner implements AgentRunner {
       // (custom tools appear as "mcp"), then collect the final result.
       for await (const event of run.stream()) {
         if (event.type === "tool_call" && event.status !== "completed") {
-          console.log(`[cursor] ${req.configKey} > ${event.name}${event.status === "error" ? " (error)" : ""}`);
+          // Cursor's own shell runs outside the factory's guarded tools, so show what it ran.
+          const command = event.name === "shell" ? (event.args as { command?: unknown } | undefined)?.command : undefined;
+          const detail = typeof command === "string" ? `: ${command.slice(0, 160)}` : "";
+          console.log(`[cursor] ${req.configKey} > ${event.name}${detail}${event.status === "error" ? " (error)" : ""}`);
         }
       }
       const result = await run.wait();
