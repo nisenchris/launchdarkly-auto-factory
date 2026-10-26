@@ -11,9 +11,9 @@
  * which provider runs them.
  *
  * Three SDK realities shape this (documented inline + in ADR 0006):
- *   1. The Cursor SDK has no system-prompt parameter, so the LD instructions are
- *      PREPENDED to the message (with the same `modeNote` the Anthropic path
- *      appends, so behavior matches across providers).
+ *   1. The SDK's systemPrompt option is server-gated per account (ours returns
+ *      InvalidArgument), so the LD instructions are PREPENDED to the message (with
+ *      the same `modeNote` the Anthropic path appends, so behavior matches).
  *   2. Routing tags + LD writes have no built-in equivalent, so the existing
  *      `SandboxToolExecutor` tools are registered as Cursor `customTools`
  *      (local-only — hence `local: { cwd }`, not a cloud agent). Reusing the same
@@ -242,7 +242,7 @@ export class CursorAgentRunner implements AgentRunner {
       console.log(`[node] ${req.configKey} cursor model → '${match.id}' (${match.reason}); ${paramSummary}`);
     }
 
-    // No system-prompt param in the SDK → prepend the LD instructions + the
+    // systemPrompt is server-gated per account → prepend the LD instructions + the
     // shared capability/tagging note, then the run prompt. The Sentry note is
     // keyed to the variation's offered tools, not the shared edge ceiling.
     const offered = new Set(overlay.tools.map((t) => t.name));
